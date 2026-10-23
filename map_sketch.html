@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Police Station - map sketch (extracted dimensions)</title>
+<style>
+  html, body { margin:0; padding:0; background:#0a0c10; height:100%; overflow:hidden; }
+  body { display:flex; align-items:center; justify-content:center; flex-direction:column; gap:10px; }
+  canvas { image-rendering:pixelated; background:#0a0c10; }
+  .hint { color:#9aa2ae; font:12px monospace; }
+</style>
+</head>
+<body>
+<canvas id="sketch" width="800" height="600"></canvas>
+<div class="hint">Police Station — 27 CreateGroundBox tiles (x*30-105, y*30+81) · cyan = solid · red = one-way (CLOUD) · yellow = LADDER · dots = spawns</div>
+<script>
+'use strict';
+// ---- The extracted level data (flash px, center-origin) ----
+const TILES = [
+  ['Ground', 302.5, 413, 369, 70, 'NONE'],
+  ['Ground', 590, 407, 230, 82, 'NONE'],
+  ['Ground', 818.5, 416, 171, 64, 'NONE'],
+  ['Ground', 886, 372, 36, 24, 'NONE'],
+  ['Ground', 876, 309, 56, 102, 'NONE'],
+  ['Ground', 876, 117.5, 56, 233, 'NONE'],
+  ['Ground', 886, 246, 36, 24, 'NONE'],
+  ['Ground', 822, 163, 52, 34, 'NONE'],
+  ['Ground', 777, 174, 38, 12, 'NONE'],
+  ['Ground', 637.5, 174, 13, 12, 'NONE'],
+  ['Ground', 716.5, 200, 13, 40, 'NONE'],
+  ['Ground', 558.5, 201, 13, 42, 'NONE'],
+  ['Metal', 733, 192, 20, 2, 'CLOUD'],
+  ['Metal', 749.5, 215, 15, 2, 'CLOUD'],
+  ['Metal', 749.5, 237, 15, 2, 'CLOUD'],
+  ['Ground', 629, 276, 154, 36, 'NONE'],
+  ['Ground', 777, 282, 142, 48, 'NONE'],
+  ['Ground', 558.5, 312, 13, 36, 'NONE'],
+  ['Ground', 712.5, 321, 13, 30, 'NONE'],
+  ['Ground', 125, 341.5, 14, 73, 'NONE'],
+  ['Metal', 248, 273, 38, 4, 'CLOUD'],
+  ['Metal', 299, 273, 38, 4, 'CLOUD'],
+  ['Metal', 273.5, 301, 13, 118, 'LADDER'],
+  ['Ground', 663, 302.5, 8, 17, 'NONE'],
+  ['Ground', 662.5, 359.5, 8, 13, 'NONE'],
+  ['Ground', 877, -43.5, 58, 89, 'NONE'],
+  ['Metal', 238, 317, 58, 4, 'CLOUD']
+];
+const PLAYER_SPAWNS = [
+  [184, 369], [272, 370], [368, 370], [443, 370], [502, 356], [571, 357],
+  [690, 358], [750, 376], [821, 375], [828, 250], [675, 251], [738, 249],
+  [588, 250], [600, 159], [672, 160], [782, 158]
+];
+const WEAPON_SPAWNS = [[235, 266], [193, 373], [517, 361], [803, 379], [643, 253], [619, 163]];
+// The camera's window over the level (mapArea 105,-81 800x600 = the visible slice)
+const CAM = { x: 105, y: -81 };
+const cv = document.getElementById('sketch');
+const ctx = cv.getContext('2d');
+
+// CreateGroundBox (extracted): a,o = the CENTER in Box2D units -> x30 = flash px;
+// the visual box: (i + .5/30)*30 wide (+1px total brick padding)
+function tileRect(t) {
+  const w = t[3] + 1, h = t[4] + 1; // +0.5/30*30 per side: the brick border
+  return { x: t[1] - CAM.x - w / 2, y: t[2] - CAM.y - h / 2, w: w, h: h };
+}
+function px(x, y, w, h, c) { ctx.fillStyle = c; ctx.fillRect(x, y, w, h); }
+
+// The backdrop: the station's interior brick wall
+function brickWall(x, y, w, h) {
+  px(x, y, w, h, '#3a404a');
+  for (let r = 0; r * 14 < h; r++) {
+    const by = y + r * 14, bh = Math.min(12, y + h - by);
+    const off = r % 2 ? 15 : 0;
+    for (let bx = x - off; bx < x + w; bx += 30) {
+      const cx = Math.max(bx, x), cw = Math.min(bx + 28, x + w) - cx;
+      if (cw > 0) { px(cx, by, cw, bh, '#4e5561'); px(cx, by, cw, 2, '#5d6570'); }
+    }
+  }
+}
+brickWall(0, 0, 800, 600);
+
+// The tiles: filled + a strong outline
+for (const t of TILES) {
+  const r = tileRect(t);
+  const fill = t[5] === 'CLOUD' ? '#7a8a9a' : t[0] === 'Metal' ? '#6a7482' : '#4e5561';
+  px(r.x, r.y, r.w, r.h, fill);
+  px(r.x, r.y, r.w, 2, '#8a94a2');
+  const col = t[5] === 'CLOUD' ? '#ff5050' : t[5] === 'LADDER' ? '#ffd34d' : '#40e0ff';
+  ctx.strokeStyle = col; ctx.lineWidth = 1.5;
+  ctx.strokeRect(r.x + 0.5, r.y + 0.5, r.w - 1, r.h - 1);
+  // The tile dimensions label
+  ctx.fillStyle = 'rgba(255,255,255,0.75)'; ctx.font = '9px monospace'; ctx.textAlign = 'center';
+  ctx.fillText(Math.round(r.w) + 'x' + Math.round(r.h), r.x + r.w / 2, r.y + r.h / 2 + 3);
+}
+
+// The player spawns (green dots)
+ctx.fillStyle = '#6fce62';
+for (const s of PLAYER_SPAWNS) {
+  const x = s[0] - OFF.x, y = s[1] - OFF.y;
+  ctx.fillRect(x - 3, y - 3, 6, 6);
+}
+// The weapon spawns (orange diamonds)
+ctx.fillStyle = '#ff9a3d';
+for (const s of WEAPON_SPAWNS) {
+  const x = s[0] - OFF.x, y = s[1] - OFF.y;
+  ctx.beginPath(); ctx.moveTo(x, y - 5); ctx.lineTo(x + 5, y); ctx.lineTo(x, y + 5); ctx.lineTo(x - 5, y); ctx.fill();
+}
+// The legend
+ctx.font = '11px monospace'; ctx.textAlign = 'left';
+ctx.fillStyle = '#40e0ff'; ctx.fillRect(10, 578, 10, 10); ctx.fillStyle = '#cfd6de'; ctx.fillText('solid', 26, 587);
+ctx.fillStyle = '#ff5050'; ctx.fillRect(70, 578, 10, 10); ctx.fillStyle = '#cfd6de'; ctx.fillText('cloud (one-way)', 86, 587);
+ctx.fillStyle = '#ffd34d'; ctx.fillRect(196, 578, 10, 10); ctx.fillStyle = '#cfd6de'; ctx.fillText('ladder', 212, 587);
+ctx.fillStyle = '#6fce62'; ctx.fillRect(266, 578, 10, 10); ctx.fillStyle = '#cfd6de'; ctx.fillText('player spawn', 282, 587);
+ctx.fillStyle = '#ff9a3d'; ctx.fillRect(376, 578, 10, 10); ctx.fillStyle = '#cfd6de'; ctx.fillText('weapon spawn', 392, 587);
+</script>
+</body>
+</html>
