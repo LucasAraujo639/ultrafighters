@@ -110,7 +110,7 @@
  *   forced drop velocity (-2*dir, -(2+2r)) [hit while aiming], empty toss (2*dir, -1).
  * - Firearm ProjectileData (Speed, Damage, Crit%, CritDmg, Pushback, ImpulseForce,
  *   WeaponCooldown, AccuracyDeflection):
- *     pistol 30/10/5/15/15/0.6/6/1 - shotgun 30/6/0/6/33/0.35/3
+ *     pistol 30/10/5/15/15/0.6/6/1
  *     rifle 35/8/6/10/20/0.45/6 - uzi 30/7/4/10/10/0.4/6
  *     magnum 40/25/40/35/50/1.05/8 - sniper 40/30/75/60/50/1.25/18
  * - Bullet movement (extracted): substeps n = round(TotalVel / 4) min 1, position
@@ -205,7 +205,7 @@
  * FIRE/THROW key bindings, aim pitch speed/max (continuous pitch model extracted,
  * UpperAimPitch value not found), bullet knockback 3*dir (between punch 2 and kick 4),
  * crit = flat CriticalDamage bonus, grenade explosion radius/falloff, muzzle flash,
- * bullets ignore their shooter, ammo on pickup (pistol 8, shotgun 4, grenade 3). *
+ * bullets ignore their shooter, ammo on pickup (pistol 8, grenade 3). *
  * Design choices (not extracted, ours to tune): player body 28x44, punch animation
  * length 18 frames per link, kick cooldown 24 frames, roll animation 16 frames,
  * lying animation 30 frames, roll trigger (DOWN while running), sprint = double-tap
@@ -294,22 +294,16 @@
   var AIM_SQUARE_DISTANCE = 8; // CalculateAimSquare's step budget (8 x 2px)
   var GUNS = {
     pistol: {
-      kind: 'gun', name: 'Pistol', ammo: 8, speed: 30, damage: 10,
+      kind: 'gun', name: 'Pistol', ammo: 8, speed: 20, damage: 10,
       critChance: 5, critDamage: 15, pushback: 15, impulseForce: 0.6,
       cooldown: 6, spread: 1, pellets: 1, shape: 'pistol',
-      laserSight: false
-    },
-    shotgun: {
-      kind: 'gun', name: 'Shotgun', ammo: 4, speed: 30, damage: 6,
-      critChance: 0, critDamage: 6, pushback: 33, impulseForce: 0.35,
-      cooldown: 3, spread: 12, pellets: 5, shape: 'shotgun',
       laserSight: false
     }
   };
   GUNS.sniper = {
     kind: 'gun', name: 'Sniper', ammo: 4, speed: 40, damage: 30,
     critChance: 75, critDamage: 60, pushback: 50, impulseForce: 1.25,
-    cooldown: 18, spread: 0, pellets: 1, shape: 'shotgun',
+    cooldown: 18, spread: 0, pellets: 1, shape: 'pistol',
     laserSight: true // the ONLY LaserSight weapon in the build
   };
   var GRENADE = {
@@ -404,7 +398,7 @@
     sword: { kind: 'melee', name: 'Sword', range: [18, 18, 23], damage: [13, 14, 15], shape: 'sword' }
   };
   GUNS.pistol.kind = 'gun';
-  GUNS.shotgun.kind = 'gun';
+
   GRENADE.kind = 'throwable';
 
   // Weapon pickups lying in the level (walk over to pick up)
@@ -413,12 +407,12 @@
     { weapon: MELEE_WEAPONS.axe, x: 470, y: 484, taken: false },
     { weapon: MELEE_WEAPONS.sword, x: 650, y: 560, taken: false },
     { weapon: GUNS.pistol, x: 320, y: 522, taken: false },
-    { weapon: GUNS.shotgun, x: 100, y: 560, taken: false },
     { weapon: GRENADE, x: 620, y: 484, taken: false }
   ];
 
   // Phase 5 entities
-  var bullets = []; // { x, y, vx, vy, damage, crit, owner }
+  var bullets = []; // { x, y, vx, vy, damage, crit, owner, trail[] }
+  var weaponRespawnTimer = 300;
   var grenades = []; // { x, y, vx, vy, fuse, spin }
   var explosions = []; // { x, y, radius, frame }
   var glassShards = []; // { x, y, vx, vy, angle, spin, size, life }
@@ -583,14 +577,7 @@
   var platforms = [
     new Tile('Ground', 302.5, 413, 369, 70), // the lower-left floor
     new Tile('Ground', 590, 407, 230, 82), // the raised central floor
-    // Source CreateGroundPolygon, including IncreaseCorners' 0.5 px vertex pad.
-    new PolygonPlatform([
-      mapPointToCanvas(704.5, 365.5),
-      mapPointToCanvas(708.5, 365.5),
-      mapPointToCanvas(733.5, 383.5),
-      mapPointToCanvas(733.5, 448.5),
-      mapPointToCanvas(704.5, 448.5)
-    ], 'Ground', 2), // short ramp between the central and right floors
+    // Ramp removed; pit covered by solid structure below.
     new Tile('Ground', 818.5, 416, 171, 64), // the right floor
     new Tile('Ground', 886, 372, 36, 24), // the block over the right floor
     new Tile('Ground', 876, 309, 56, 102), // the right wall, middle segment
@@ -600,6 +587,7 @@
     new Tile('Ground', 777, 174, 38, 12), // the ledge by the spawns (600,159)
     new Tile('Ground', 637.5, 174, 171, 12), // long upper ledge (5.7 m in the source)
     new Tile('Ground', 716.5, 200, 13, 40), // the hanging pillar
+    new Tile('Ground', 725, 448, 20, 60), // cover the pit left of the lower door
     new Tile('Ground', 558.5, 201, 13, 42), // the second hanging pillar
     new Tile('Metal', 733, 192, 20, 2, 'CLOUD'), // the cloud shelves
     new Tile('Metal', 749.5, 215, 45, 2, 'CLOUD'),
@@ -609,15 +597,15 @@
     new Tile('Ground', 558.5, 312, 13, 36), // the pillar under the central platform
     new Tile('Ground', 712.5, 321, 13, 30), // the pillar under the right platform
     new Tile('Ground', 125, 341.5, 14, 73), // the post over the left floor
-    new Tile('Metal', 248, 273, 38, 4, 'CLOUD'), // the high clouds
-    new Tile('Metal', 299, 273, 38, 4, 'CLOUD'),
-    new Tile('Metal', 273.5, 301, 13, 118, 'LADDER'), // the vertical ladder
+    new Tile('Metal', 240, 273, 38, 4, 'CLOUD'), // the high clouds
+    new Tile('Metal', 307, 273, 38, 4, 'CLOUD'),
+    new Tile('Metal', 273.5, 273, 13, 146, 'LADDER'), // the vertical ladder
     // Source CreateGroundCircle: radius 7/30 m + 0.5 px.
     new CirclePlatform(mapPointToCanvas(125, 301), 7.5, 'Metal'),
     new Tile('Ground', 663, 302.5, 8, 17), // the small block
     new Tile('Ground', 662.5, 359.5, 15, 13), // source width is 0.5 m
     new Tile('Ground', 877, -43.5, 58, 89), // the top-right corner frame
-    new Tile('Metal', 238, 317, 58, 4, 'CLOUD')
+    new Tile('Metal', 230, 317, 58, 4, 'CLOUD')
   ];
 
   // AddGlass creates two hinged vertical panes. AddBox pads the source [length,3]
@@ -633,8 +621,8 @@
   // inverseX=false). Teleport preserves vertical offset within the door and moves to the
   // target door's center; trigger only while moving in the door direction.
   var doorPortals = [
-    { x: 848 - MAP_AREA.x, y: 234 - MAP_AREA.y, w: 20, h: 24, target: 1 }, // upper door
-    { x: 848 - MAP_AREA.x, y: 360 - MAP_AREA.y, w: 20, h: 24, target: 0 }  // lower door
+    { x: 848 - MAP_AREA.x, y: 218 - MAP_AREA.y, w: 20, h: 44, target: 1 }, // upper entrance
+    { x: 848 - MAP_AREA.x, y: 344 - MAP_AREA.y, w: 20, h: 44, target: 0 }  // lower entrance
   ];
 
   // Player spawn points (extracted playerSpawns, 16 points)
@@ -680,7 +668,7 @@
 
   // Weapon spawn points (extracted weaponSpawns, 6 points)
   var weaponSpawnPoints = [
-    { x: 130, y: 185 }, { x: 88, y: 454 }, { x: 412, y: 442 }, { x: 698, y: 460 },
+    { x: 88, y: 454 }, { x: 412, y: 442 }, { x: 698, y: 460 },
     { x: 538, y: 334 }, { x: 514, y: 244 }
   ];
 
@@ -898,7 +886,7 @@
 
     // Phase 5: ranged/throwable slots + aiming (extracted model)
     this.ranged = null; // { gun, ammo } — CurrentRangeWeapon
-    this.throwable = null; // { ammo } — CurrentThrowableWeapon
+    this.throwable = { ammo: GRENADE.ammo }; // { ammo } — CurrentThrowableWeapon (3 grenades by default)
     this.aiming = false;
     this.aimMode = 0; // 0 = firearm, 1 = throwable
     this.aimPitch = 0; // degrees, negative = up
@@ -918,6 +906,18 @@
 
   Player.prototype.getBounds = function () {
     return { x: this.x, y: this.y, w: this.w, h: this.h };
+  };
+
+  Player.prototype.pointInPortal = function (x, y, p) {
+    return x > p.x && x < p.x + p.w && y > p.y && y < p.y + p.h;
+  };
+
+  Player.prototype.getTargetPos = function (targetPortal, sourcePortal, x, y) {
+    // Matches extracted GetTargetPositionFromCurrent (preserves vertical offset)
+    return {
+      x: targetPortal.x + targetPortal.w / 2,
+      y: targetPortal.y + (y - sourcePortal.y)
+    };
   };
 
   Player.prototype.pressLeft = function () {
@@ -1036,12 +1036,14 @@
     }
     weaponItems.push({
       weapon: this.ranged.gun,
+      ammo: this.ranged.ammo,
       x: this.x + this.w / 2,
       y: this.y + this.h,
       taken: false,
       pickupDelay: 30, // grace before re-grab (anti ping-pong)
       vx: vx,
-      vy: vy
+      vy: vy,
+      ttl: forced ? 0 : 45 // empty gun disappears shortly after being tossed
     });
     this.ranged = null;
   };
@@ -1084,10 +1086,18 @@
         damage: gun.damage,
         critDamage: gun.critDamage,
         crit: Math.random() * 100 < gun.critChance,
-        owner: this.id
+        owner: this.id,
+        trail: []
       });
     }
     this.ranged.ammo--;
+    if (this.ranged.ammo <= 0) {
+      // Empty gun is tossed forward and disappears (Superfighters behavior)
+      this.dropGunItem(false);
+      this.aiming = false;
+      this.aimPitch = 0;
+      this.aimPitchSpeed = 0;
+    }
   };
 
   Player.prototype.releaseThrowable = function () {
@@ -1499,7 +1509,8 @@
       downPressed &&
       this.onGround &&
       !this.rolling &&
-      !this.diving
+      !this.diving &&
+      !this.onLadder()
     ) {
       if (this.sprinting) {
         this.drainEnergy(SPRINT_DIVE_COST);
@@ -1867,15 +1878,19 @@
     // the DOWN key allows the grounded drop-in. The body-overlap version was
     // catching jump starts beside the ladder and hijacking the jump's vy.
     var onLadderCenter = this.onLadder();
+    // Cancel horizontal drift only when first touching the ladder (not while already on it)
+    if (onLadderCenter && !this._wasOnLadder) this.airVelocityX = 0;
+    this._wasOnLadder = onLadderCenter;
     this.climbing =
       ((this.pressUp() && onLadderCenter) ||
-        (this.pressDownKey() && (this.onGround || onLadderCenter))) &&
+        (this.pressDownKey() && onLadderCenter)) &&
       !this.knockedDown &&
       this.hp > 0;
     if (this.climbing) {
       if (this.pressUp()) this.airVelocityY = -CLIMB_SPEED;
       else if (this.pressDownKey()) this.airVelocityY = CLIMB_SPEED;
       else this.airVelocityY = 0;
+      // horizontal movement allowed while on the ladder
     }
 
     // ---------- Substepped integration (engine-faithful) ----------
@@ -1905,6 +1920,8 @@
       for (var pi = 0; pi < platforms.length; pi++) {
         var plat = platforms[pi];
         if (!plat.solidSides || platformIsOneWay(plat) || plat.ladder) continue;
+        if (this.climbing) continue;
+        if (plat.elevator && this.groundedPlatform === plat && !this.performJumpDown && this.onGround) continue;
         if (!rectsOverlap(bounds, plat)) continue;
         var surfaceY = platformBoundaryForSpan(plat, this.x, this.x + this.w, false);
         if (c >= 0 && surfaceY !== null && this.y + this.h <= surfaceY + GROUND_SUPPORT_TOLERANCE) {
@@ -1912,6 +1929,7 @@
         }
         var wasInsideX = prevX < plat.x + plat.w && prevX + this.w > plat.x;
         if (wasInsideX) continue;
+        if (plat.elevator) continue;
         if (h > 0) this.x = plat.x - this.w;
         else if (h < 0) this.x = plat.x + plat.w;
         this.airVelocityX = 0;
@@ -1926,6 +1944,7 @@
       for (pi = 0; pi < platforms.length; pi++) {
         plat = platforms[pi];
         if (plat.ladder) continue;
+        if (this.climbing) continue; // climbing ignores all platform collisions
         if (plat.cloud && this.performJumpDown) continue;
 
         // A landing requires downward motion, horizontal overlap, and the
@@ -1939,10 +1958,30 @@
           previousFeet <= surfaceY + 1e-7 &&
           currentFeet >= surfaceY - 1e-7
         ) {
+          if (plat.elevator && this.performJumpDown) continue;
           this.y = surfaceY - this.h;
           groundedThisFrame = true;
           groundedPlatformThisFrame = plat;
           landVy = c; // captured for the ragdoll impact formula
+          this.airVelocityY = 0;
+          c = 0;
+          bounds = this.getBounds();
+          break;
+        }
+        // Keep standing on an elevator that moves up into the player
+        if (
+          plat.elevator &&
+          !this.performJumpDown &&
+          surfaceY !== null &&
+          previousFeet <= surfaceY + 2 &&
+          currentFeet >= surfaceY - 2 &&
+          this.onGround &&
+          this.groundedPlatform === plat
+        ) {
+          this.y = surfaceY - this.h;
+          groundedThisFrame = true;
+          groundedPlatformThisFrame = plat;
+          if (landVy > 0) landVy = 0;
           this.airVelocityY = 0;
           c = 0;
           bounds = this.getBounds();
@@ -1959,6 +1998,7 @@
           this.y <= undersideY + 1e-7
         ) {
           // Head impact: only resolve when the player's top crosses the solid's underside.
+          if (plat.elevator) continue;
           this.y = undersideY;
           this.airVelocityY = 0;
           c = 0;
@@ -1976,6 +2016,10 @@
       if (!groundedThisFrame && !this.climbing) {
         this.airVelocityY += (PLAYER_GRAVITY * gameSpeed) / steps;
         c = this.airVelocityY * gameSpeed;
+      } else if (groundedThisFrame && groundedPlatformThisFrame && groundedPlatformThisFrame.elevator && !this.performJumpDown) {
+        this.airVelocityY = 0;
+        c = 0;
+        this.y = platformBoundaryForSpan(groundedPlatformThisFrame, this.x, this.x + this.w, false) - this.h;
       }
     }
 
@@ -2022,38 +2066,51 @@
         this.checkFallOnPlayer(other);
       }
     } else if (this.onGround && !this.falling && !this.diving) {
-      // Keep support only when the feet remain within 1 px of a real top
-      // surface. A full-body overlap with a wall is not ground contact.
-      var feetY = this.y + this.h;
-      var support = null;
-      var supportGap = GROUND_SUPPORT_TOLERANCE + 1e-7;
-      for (pi = 0; pi < platforms.length; pi++) {
-        plat = platforms[pi];
-        if (plat.ladder || (plat.cloud && this.performJumpDown)) continue;
-        surfaceY = platformBoundaryForSpan(plat, this.x, this.x + this.w, false);
-        if (surfaceY === null) continue;
-        var allowedGap = GROUND_SUPPORT_TOLERANCE;
-        if (plat === startingGroundPlatform && groundedAtFrameStart && this.airVelocityY >= 0) {
-          var oldSurfaceY = platformBoundaryForSpan(
-            plat,
-            frameStartX,
-            frameStartX + this.w,
-            false
-          );
-          if (oldSurfaceY !== null) allowedGap += Math.abs(surfaceY - oldSurfaceY);
+      if (this.groundedPlatform && this.groundedPlatform.elevator && !this.performJumpDown) {
+        var elevSurface = platformBoundaryForSpan(this.groundedPlatform, this.x, this.x + this.w, false);
+        if (elevSurface !== null) {
+          this.y = elevSurface - this.h;
+          this.onGround = true;
+        } else {
+          this.groundedPlatform = null;
+          this.onGround = false;
         }
-        var gap = Math.abs(feetY - surfaceY);
-        if (gap <= allowedGap && gap < supportGap) {
-          support = plat;
-          supportGap = gap;
-        }
-      }
-      this.onGround = support !== null;
-      if (support) {
-        this.y = platformBoundaryForSpan(support, this.x, this.x + this.w, false) - this.h;
-        this.groundedPlatform = support;
       } else {
-        this.groundedPlatform = null;
+        // Keep support only when the feet remain within 1 px of a real top
+        // surface. A full-body overlap with a wall is not ground contact.
+        var feetY = this.y + this.h;
+        var support = null;
+        var supportGap = GROUND_SUPPORT_TOLERANCE + 1e-7;
+        for (pi = 0; pi < platforms.length; pi++) {
+          plat = platforms[pi];
+          if (plat.ladder) continue;
+          if (plat.cloud && this.performJumpDown) continue;
+          if (plat.elevator && this.performJumpDown) continue;
+          surfaceY = platformBoundaryForSpan(plat, this.x, this.x + this.w, false);
+          if (surfaceY === null) continue;
+          var allowedGap = GROUND_SUPPORT_TOLERANCE;
+          if (plat === startingGroundPlatform && groundedAtFrameStart && this.airVelocityY >= 0) {
+            var oldSurfaceY = platformBoundaryForSpan(
+              plat,
+              frameStartX,
+              frameStartX + this.w,
+              false
+            );
+            if (oldSurfaceY !== null) allowedGap += Math.abs(surfaceY - oldSurfaceY);
+          }
+          var gap = Math.abs(feetY - surfaceY);
+          if (gap <= allowedGap && gap < supportGap) {
+            support = plat;
+            supportGap = gap;
+          }
+        }
+        this.onGround = support !== null;
+        if (support) {
+          this.y = platformBoundaryForSpan(support, this.x, this.x + this.w, false) - this.h;
+          this.groundedPlatform = support;
+        } else {
+          this.groundedPlatform = null;
+        }
       }
     }
 
@@ -2101,32 +2158,26 @@
       }
     }
 
-    // Map portals (extracted Police Station doors): touch either recessed door
-    // to teleport to the paired door, preserving vertical offset.
-    if (this.portalCooldown <= 0 && !this.grabbedBy && this.hp > 0) {
-      var pxCenter = this.x + this.w / 2;
-      var pyCenter = this.y + this.h / 2;
-      var pyFeet = this.y + this.h;
-      var wantRight = dir > 0 || this.airVelocityX > 0.05;
+    // Map portals (extracted Police Station): pass through the black entrance
+    // to teleport to the other one.
+    if (this.portalCooldown <= 0 && !this.grabbedBy && this.hp > 0 && this.lastDirX > 0) {
+      var px = this.x + this.w / 2;
+      var py = this.y + this.h / 2;
       for (var pi2 = 0; pi2 < doorPortals.length; pi2++) {
         var d = doorPortals[pi2];
-        if (pxCenter <= d.x - 2 || pxCenter >= d.x + d.w + 2) continue;
-        var insideY = (pyFeet >= d.y - 4 && pyFeet <= d.y + d.h + 4) ||
-                      (pyCenter >= d.y && pyCenter <= d.y + d.h);
-        if (!insideY) continue;
-        if (wantRight || this.onGround) {
-          var dt = doorPortals[d.target];
-          var feetOffset = pyFeet - (d.y + d.h);
-          this.x = dt.x + dt.w / 2 - this.w / 2;
-          this.y = dt.y + dt.h + feetOffset - this.h;
-          this.airVelocityX = 0;
-          this.airVelocityY = 0;
-          this.portalCooldown = 18;
-          this.onGround = false;
-          this.groundedPlatform = null;
-          updateCamera(true);
-          break;
-        }
+        if (px < d.x || px > d.x + d.w) continue;
+        if (py < d.y || py > d.y + d.h) continue;
+        var dt = doorPortals[d.target];
+        var res = this.getTargetPos(dt, d, px, py);
+        this.x = res.x - this.w / 2;
+        this.y = res.y - this.h;
+        this.airVelocityX = 0;
+        this.airVelocityY = 0;
+        this.portalCooldown = 20;
+        this.onGround = false;
+        this.groundedPlatform = null;
+        updateCamera(true);
+        break;
       }
     }
 
@@ -2151,10 +2202,12 @@
           this.equipped = item.weapon;
           item.taken = true;
         } else if (kind === 'gun') {
+          var itemAmmo = (item.ammo !== undefined) ? item.ammo : item.weapon.ammo;
+          if (itemAmmo <= 0) { continue; } // empty guns can't be picked up
           if (this.ranged) {
-            weaponItems.push({ weapon: this.ranged.gun, x: this.x + this.w / 2, y: this.y + this.h, taken: false, pickupDelay: 30 });
+            weaponItems.push({ weapon: this.ranged.gun, ammo: this.ranged.ammo, x: this.x + this.w / 2, y: this.y + this.h, taken: false, pickupDelay: 30 });
           }
-          this.ranged = { gun: item.weapon, ammo: item.weapon.ammo };
+          this.ranged = { gun: item.weapon, ammo: itemAmmo };
           item.taken = true;
         } else if (kind === 'throwable') {
           if (this.throwable && this.throwable.ammo > 0) {
@@ -2182,7 +2235,9 @@
 
     // Landing recovery (not while ragdoll / lying — the launch must survive)
     if (this.onGround && !this.falling && !this.knockedDown) {
-      this.airVelocityY = 0;
+      if (!(this.groundedPlatform && this.groundedPlatform.elevator && !this.performJumpDown)) {
+        this.airVelocityY = 0;
+      }
       this.jumping = false;
       this.jumpPushTimeLeft = 0;
       this.wallJumping = false; // the wall state clears on landing
@@ -2259,23 +2314,31 @@
     }
   }
 
-  function drawDoor(p) {
-    // Drawn over the wall recesses that house the extracted Police Station doors.
+  function drawPortalEntrance(p, isUpper) {
+    // Dark recessed entrance (no door panel). Looks like an open passage.
     var x = p.x, y = p.y, w = p.w, h = p.h;
-    px(x - 2, y - 2, w + 4, h + 4, METAL.dark);
-    px(x, y, w, h, '#5c6472');
-    px(x, y, w, 2, METAL.light);
-    px(x, y + h - 2, w, 2, '#3d434d');
-    // Vertical frame + two door panels
-    px(x + w / 2 - 1, y, 2, h, '#3d434d');
-    px(x + 4, y + 4, 4, h - 8, '#4a515c');
-    px(x + w - 8, y + 4, 4, h - 8, '#4a515c');
-    // Handles
-    px(x + w / 2 - 4, y + h / 2 - 2, 2, 4, '#b8c0cc');
-    px(x + w / 2 + 2, y + h / 2 - 2, 2, 4, '#b8c0cc');
-    // Small window panes
-    px(x + 6, y + 6, 2, 4, '#7aa2c8');
-    px(x + w - 8, y + 6, 2, 4, '#7aa2c8');
+    // Frame around the opening
+    px(x - 1, y - 1, w + 2, 1, '#2f333b');
+    px(x - 1, y + h, w + 2, 1, '#1f2228');
+    px(x - 1, y, 1, h, '#2f333b');
+    px(x + w, y, 1, h, '#1f2228');
+    // Pitch black interior
+    px(x, y, w, h, '#000000');
+    // Subtle inner shadow
+    px(x, y + h - 2, w, 1, '#101215');
+    if (isUpper) {
+      // Emergency exit sign above the upper entrance
+      px(x - 3, y - 10, w + 6, 8, '#8a1f1f');
+      px(x - 3, y - 10, w + 6, 2, '#b92b2b');
+      px(x - 3, y - 4, w + 6, 2, '#6f1717');
+      // "EXIT" style bars
+      px(x + 2, y - 7, 3, 4, '#f5f5f5');
+      px(x + w - 5, y - 7, 3, 4, '#f5f5f5');
+      px(x + 6, y - 6, w - 12, 2, '#f5f5f5');
+      // Arrow pointing up/out
+      px(x + w / 2 - 1, y - 8, 2, 2, '#f5f5f5');
+      px(x + w / 2 - 2, y - 7, 4, 1, '#f5f5f5');
+    }
   }
 
   function drawElevator(e) {
@@ -2431,10 +2494,6 @@
       px(x, y, 8, 3, '#2e2e34'); // slide
       px(x, y + 3, 3, 5, '#2e2e34'); // grip
       px(x + 8, y, 2, 2, '#55555e'); // muzzle
-    } else if (c.shape === 'shotgun') {
-      px(x, y, 14, 3, '#4a3a28'); // barrel
-      px(x + 14, y, 3, 3, '#55555e');
-      px(x, y + 3, 5, 4, '#6b4f2e'); // stock
     } else if (c.shape === 'grenade') {
       px(x, y, 6, 6, '#3f5a3f'); // body
       px(x + 1, y - 2, 3, 2, '#2a3f2a'); // pin
@@ -2773,7 +2832,7 @@
     throw: 'Comma'
   });
   player2.y -= player2.h; // spawn.y is the feet level
-
+  player2.y -= player2.h; // spawn.y is the feet level
   // Camera is a viewport transform, so map coordinates and collision geometry
   // remain unchanged. It zooms in on nearby players and zooms out to fit both.
   var CAMERA_MIN_ZOOM = 0.72;
@@ -2833,16 +2892,19 @@
       for (var s = 0; s < steps && !dead; s++) {
         b.x += b.vx / steps;
         b.y += b.vy / steps;
+        if (!b.trail) b.trail = [];
+        b.trail.push({ x: b.x, y: b.y });
+        if (b.trail.length > 12) b.trail.shift();
         if (b.x < 0 || b.x > GAME_WIDTH || b.y < 0 || b.y > GAME_HEIGHT) {
           dead = true;
           break;
         }
         for (var pi = 0; pi < platforms.length; pi++) {
           var plat = platforms[pi];
+          if (plat.cloud || plat.ladder || plat.oneWay) continue; // bullets pass through clouds/ladders/one-way
           if (pointInPlatform(b.x, b.y, plat)) {
             // SOLID_GLASS_01 is transparent to nothing: a bullet shatters it.
             if (plat.glass) breakGlassPane(plat);
-            // Walls stop the bullet (extracted: VelY = 0, VelX -> ±0.1)
             dead = true;
             break;
           }
@@ -3016,9 +3078,13 @@
   function updateWeaponItems() {
     // Dropped weapons fly with physics and come to rest; pickupDelay is the
     // grace period before a dropped weapon can be grabbed again
-    for (var i = 0; i < weaponItems.length; i++) {
+    for (var i = weaponItems.length - 1; i >= 0; i--) {
       var it = weaponItems[i];
-      if (it.taken) continue;
+      if (it.taken) { weaponItems.splice(i, 1); continue; }
+      if (it.ttl && it.ttl > 0) {
+        it.ttl--;
+        if (it.ttl <= 0) { weaponItems.splice(i, 1); continue; }
+      }
       if (it.pickupDelay > 0) it.pickupDelay--;
       if (!it.vx && !it.vy) continue;
       it.vy += PLAYER_GRAVITY;
@@ -3044,6 +3110,21 @@
           }
         }
       }
+    }
+    // Random respawn of weapons at spawn points every ~5-8 seconds
+    weaponRespawnTimer--;
+    if (weaponRespawnTimer <= 0) {
+      weaponRespawnTimer = 300 + Math.floor(Math.random() * 180);
+      var catalog = [MELEE_WEAPONS.machete, MELEE_WEAPONS.axe, MELEE_WEAPONS.sword, GUNS.pistol];
+      var wp = weaponSpawnPoints[Math.floor(Math.random() * weaponSpawnPoints.length)];
+      weaponItems.push({
+        weapon: catalog[Math.floor(Math.random() * catalog.length)],
+        x: wp.x,
+        y: wp.y,
+        taken: false,
+        pickupDelay: 0,
+        ttl: 480
+      });
     }
   }
 
@@ -3080,8 +3161,12 @@
     }
   }
 
+  var lastPickedSpawn = -1;
   function pickSpawnPoint() {
-    return playerSpawns[Math.floor(Math.random() * playerSpawns.length)];
+    var idx = Math.floor(Math.random() * playerSpawns.length);
+    if (idx === lastPickedSpawn) idx = (idx + 1) % playerSpawns.length;
+    lastPickedSpawn = idx;
+    return playerSpawns[idx];
   }
 
   // Teleport a fighter onto a spawn point. Keeps hp on purpose: this is also
@@ -3144,6 +3229,7 @@
     p.reSprintWindow = 0;
     p.equipped = MELEE_WEAPONS.fists;
     p.ranged = null;
+    p.throwable = { ammo: GRENADE.ammo };    p.ranged = null;
     p.throwable = null;
     p.aiming = false;
     p.aimMode = 0;
@@ -3169,7 +3255,7 @@
 
   function populateWeaponSpawns() {
     // The level's 6 weapon spawn points get a random catalog weapon
-    var catalog = [MELEE_WEAPONS.machete, MELEE_WEAPONS.axe, MELEE_WEAPONS.sword, GUNS.pistol, GUNS.shotgun];
+    var catalog = [MELEE_WEAPONS.machete, MELEE_WEAPONS.axe, MELEE_WEAPONS.sword, GUNS.pistol];
     weaponItems.length = 0;
     for (var i = 0; i < weaponSpawnPoints.length; i++) {
       var wp = weaponSpawnPoints[i];
@@ -3178,7 +3264,8 @@
         x: wp.x,
         y: wp.y,
         taken: false,
-        pickupDelay: 0
+        pickupDelay: 0,
+        ttl: 480 // despawn after 480 ticks (8s) like Superfighters
       });
     }
   }
@@ -3186,12 +3273,14 @@
   function restartRound() {
     roundOver = null;
     restartTimer = 0;
+    lastPickedSpawn = -1;
     resetFighterForRound(player1);
     resetFighterForRound(player2);
     populateWeaponSpawns();
     bullets.length = 0;
     grenades.length = 0;
     explosions.length = 0;
+    weaponRespawnTimer = 300;
     restoreGlassPanes();
     for (var i = weaponItems.length - 1; i >= 6; i--) weaponItems.splice(i, 1);
     for (i = 0; i < weaponItems.length; i++) {
@@ -3641,14 +3730,33 @@
   }
 
   function drawBullets() {
-    ctx.strokeStyle = '#ffe9a3';
-    ctx.lineWidth = 2;
     for (var i = 0; i < bullets.length; i++) {
       var b = bullets[i];
-      ctx.beginPath();
-      ctx.moveTo(b.x - b.vx * 0.05, b.y - b.vy * 0.05);
-      ctx.lineTo(b.x, b.y);
-      ctx.stroke();
+      if (b.trail && b.trail.length > 1) {
+        var grad = ctx.createLinearGradient(b.trail[0].x, b.trail[0].y, b.x, b.y);
+        grad.addColorStop(0, 'rgba(255,233,163,0)');
+        grad.addColorStop(1, 'rgba(255,233,163,0.9)');
+        ctx.strokeStyle = grad;
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(b.trail[0].x, b.trail[0].y);
+        for (var t = 1; t < b.trail.length; t++) {
+          ctx.lineTo(b.trail[t].x, b.trail[t].y);
+        }
+        ctx.lineTo(b.x, b.y);
+        ctx.stroke();
+        ctx.fillStyle = 'rgba(255,244,210,0.95)';
+        ctx.beginPath();
+        ctx.arc(b.x, b.y, 1.2, 0, Math.PI * 2);
+        ctx.fill();
+      } else {
+        ctx.strokeStyle = 'rgba(255,233,163,0.9)';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(b.x - b.vx * 0.02, b.y - b.vy * 0.02);
+        ctx.lineTo(b.x, b.y);
+        ctx.stroke();
+      }
     }
   }
 
@@ -3729,11 +3837,16 @@
     for (var i = 0; i < platforms.length; i++) drawPlatform(platforms[i]);
     drawGlassShards();
     for (i = 0; i < hangingLamps.length; i++) drawHangingLamp(hangingLamps[i]);
-    // Far-right wall doors (extracted Police Station)
-    for (var di = 0; di < doorPortals.length; di++) drawDoor(doorPortals[di]);
+    // Far-right wall entrances (extracted Police Station)
+    drawPortalEntrance(doorPortals[0], true);
+    drawPortalEntrance(doorPortals[1], false);
     for (var wi = 0; wi < weaponItems.length; wi++) {
       var item = weaponItems[wi];
-      if (!item.taken) drawWeaponShape(item.weapon, item.x - 6, item.y - 10);
+      if (item.taken) continue;
+      if (item.ttl && item.ttl <= 192) {
+        if (Math.floor(item.ttl / 8) % 2 === 0) continue;
+      }
+      drawWeaponShape(item.weapon, item.x - 6, item.y - 10);
     }
     drawBullets();
     drawGrenades();

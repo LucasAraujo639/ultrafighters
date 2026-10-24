@@ -106,22 +106,17 @@ test('Police Station keeps the extracted collision shapes and dimensions', () =>
     (platform) => platform.shape === 'rect' && !platform.glass && !platform.elevator
   );
   const lowerLeftFloor = boxes.find((platform) => platform.x < 20 && platform.w > 300);
-  const ramp = platforms.find((platform) => platform.shape === 'polygon');
   const circle = platforms.find((platform) => platform.shape === 'circle');
   const glass = platforms.filter((platform) => platform.glass);
   const elevator = platforms.find((platform) => platform.elevator);
 
-  assert.equal(boxes.length, 27);
+  assert.equal(boxes.length, 28);
   assert.ok(boxes.some((platform) => Math.abs(platform.w - 171.5) < 1e-7));
   assert.equal(
     boxes.filter((platform) => platform.cloud && Math.abs(platform.w - 45.5) < 1e-7).length,
     2
   );
   assert.ok(boxes.some((platform) => Math.abs(platform.w - 15.5) < 1e-7));
-  assert.deepEqual(
-    Array.from(ramp.vertices, (vertex) => [vertex.x, vertex.y]),
-    [[599.5, 446.5], [603.5, 446.5], [628.5, 464.5], [628.5, 529.5], [599.5, 529.5]]
-  );
   assert.deepEqual([circle.cx, circle.cy, circle.radius], [20, 382, 7.5]);
   assert.deepEqual(glass.map((pane) => [pane.w, pane.h]), [[4, 38], [4, 32]]);
   assert.deepEqual([elevator.x, elevator.y, elevator.w, elevator.h], [419, 440.5, 26, 7]);
@@ -588,16 +583,10 @@ test('the Police Station elevator carries a grounded rider through its fixed ste
   assert.ok(Math.abs(player.y + player.h - elevator.y) < 1e-6);
 });
 
-test('the extracted ramp and circle provide real top-surface collisions', () => {
+test('the extracted circle provides real top-surface collisions', () => {
   const { game } = createGame();
   const player = game.players[0];
-  const ramp = Array.from(game.platforms).find((platform) => platform.shape === 'polygon');
   const circle = Array.from(game.platforms).find((platform) => platform.shape === 'circle');
-
-  resetPlayer(player, 610, 380, false);
-  for (let frame = 0; frame < 60 && !player.onGround; frame++) game.step();
-  assert.equal(player.groundedPlatform, ramp);
-  assert.ok(Math.abs(player.y + player.h - 451.18) < 0.1);
 
   resetPlayer(player, 7, 300, false);
   for (let frame = 0; frame < 60 && !player.onGround; frame++) game.step();
