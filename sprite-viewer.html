@@ -2,26 +2,26 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <title>Frame viewer — player_agent (1..56)</title>
+  <title>Sprite viewer — shapes 592..634</title>
   <style>
     body { margin: 12px; background: #111; color: #eee; font-family: monospace; }
     .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(90px, 1fr)); gap: 8px; }
     .cell { background: #1a1a1a; border: 1px solid #333; padding: 6px; text-align: center; }
-    .cell img { image-rendering: pixelated; max-width: 70px; }
+    .cell img { image-rendering: pixelated; max-width: 60px; max-height: 60px; }
     .num { font-weight: bold; }
   </style>
 </head>
 <body>
-  <h1>player_agent frames 1–56</h1>
-  <p>Usá estos números en <code>window.PLAYER_SPRITE_MAP</code> (ej. <code>{ idle: sfRange(1,4), walk: [5,6,7] }</code>).</p>
+  <h1>Shapes 592–634</h1>
+  <p>Usa estos números en <code>window.PLAYER_SPRITE_MAP</code> (ej. <code>{ idle: 592, walk: [593,594,595], jump: 609 }</code>).</p>
   <div class="grid" id="g"></div>
   <script>
     const g = document.getElementById('g');
-    for (let n = 1; n <= 56; n++) {
+    for (let n = 592; n <= 634; n++) {
       const cell = document.createElement('div');
       cell.className = 'cell';
       const img = document.createElement('img');
-      img.src = `superfighters/sprites/DefineSprite_1245_player_agent/${n}.png`;
+      img.src = `superfighters/shapes/${n}.svg`;
       const num = document.createElement('div');
       num.className = 'num';
       num.textContent = n;

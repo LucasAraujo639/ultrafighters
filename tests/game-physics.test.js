@@ -246,12 +246,12 @@ test('the third punch launches the victim, who lands knocked down and gets up', 
   attacker.tryPunchHit(victim);
 
   // PunchPlayer: AirVelocityX = 3 * attacker dir, AirVelocityY = -2.5, Fall()
-  // (port tuning: 4 / -3).
+  // (extracted values, faithful to the artifact).
   assert.equal(victim.falling, true, 'the combo finisher ragdolls the victim');
   assert.equal(victim.knockedDown, false);
   assert.equal(victim.onGround, false);
-  assert.equal(victim.airVelocityX, 4);
-  assert.equal(victim.airVelocityY, -3);
+  assert.equal(victim.airVelocityX, 3);
+  assert.equal(victim.airVelocityY, -2.5);
   assert.ok(victim.hp < 100, 'the finisher also deals its link damage');
 
   // The ragdoll lands and becomes Knockdowned (lying on the ground).
