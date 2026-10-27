@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>SF Player Physics — standalone demo</title>
+  <style>
+    body { margin: 0; background: #111; color: #eee; font-family: sans-serif; }
+    canvas { display: block; margin: 20px auto; background: #0a0c10; image-rendering: pixelated; }
+    .hint { text-align: center; }
+  </style>
+</head>
+<body>
+  <canvas id="c" width="800" height="600"></canvas>
+  <p class="hint">A/D move · W jump · S (double-tap) drop through clouds</p>
+  <script src="src/player-physics.js"></script>
+  <script>
+    const { Player } = window.SFPlayerPhysics;
+    const canvas = document.getElementById('c');
+    const ctx = canvas.getContext('2d');
+    const platforms = [
+      { x: 0, y: 500, w: 800, h: 100, solidSides: true, cloud: false, ladder: false },
+      { x: 200, y: 400, w: 120, h: 10, solidSides: true, cloud: false, ladder: false },
+      { x: 400, y: 320, w: 120, h: 4, material: 'Metal', solidSides: false, cloud: true, oneWay: true, ladder: false }
+    ];
+    const p = new Player({ x: 100, y: 460, platforms });
+    p.onGround = true;
+    p.groundedPlatform = platforms[0];
+
+    window.addEventListener('keydown', e => { p.keyDown(e.code); });
+    window.addEventListener('keyup', e => { p.keyUp(e.code); });
+
+    function loop() {
+      p.update(null, { platforms, gameSpeed: 1 });
+      ctx.clearRect(0,0,800,600);
+      ctx.fillStyle = '#0a0c10'; ctx.fillRect(0,0,800,600);
+      ctx.fillStyle = '#3a3e45';
+      for (const pl of platforms) ctx.fillRect(pl.x, pl.y, pl.w, pl.h);
+      ctx.fillStyle = '#e8b48a';
+      ctx.fillRect(p.x, p.y, p.w, p.h);
+      requestAnimationFrame(loop);
+    }
+    loop();
+  </script>
+</body>
+</html>

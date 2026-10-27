@@ -244,13 +244,13 @@
   var ACCEL_SCALE = TIME_SCALE * TIME_SCALE; // 1
   var TICKS_TO_STEPS = 1 / TIME_SCALE; // 1
 
-  var PLAYER_GRAVITY = 0.58 * ACCEL_SCALE; // 0.6 px/tick^2, eased down a touch
+  var PLAYER_GRAVITY = 0.6 * ACCEL_SCALE; // extracted PlayerGravity
   var PLAYER_JUMP_POWER = -5 * VEL_SCALE; // -5 px/tick -> -5 px/step
   var PLAYER_JUMP_PUSH_POWER = -0.7 * ACCEL_SCALE; // -0.7 px/tick per tick -> -0.7 px/step^2
   var PLAYER_JUMP_PUSH_TIME = 4 * TICKS_TO_STEPS; // 4 ticks -> 4 steps
   // Base run speed eased down 25% from the extracted 1.7 (requested). Sprint
   // stays 2x this value, so both paces drop by the same proportion.
-  var PLAYER_RUN_SPEED = 1.275 * VEL_SCALE; // 1.275 px/tick -> 1.275 px/step
+  var PLAYER_RUN_SPEED = 1.7 * VEL_SCALE; // original extracted RunSpeed (1.7 px/tick)
   var AIR_CONTROL_FACTOR = 0.8; // proportional to RunSpeed, so it scales itself
   var AIR_FALL_MIN = 0.1 * VEL_SCALE; // 0.1 px/step
   var FALL_TRIGGER_SPEED = 8.5 * VEL_SCALE; // 8.5 px/step
@@ -328,9 +328,9 @@
 
   // ---------- Constants (extracted — dive / tackle) ----------
   // Dive speed eased down from the extracted 3.5 (requested: less momentum).
-  var DIVE_SPEED = 2.0 * VEL_SCALE; // PlayerState.DiveSpeed (full sprint dive)
-  var DIVE_SPEED_SHORT = 1 * VEL_SCALE; // short dive (ShortDiveAvailable)
-  var DIVE_HOP = -3 * VEL_SCALE; // AirVelocityY -= 3 on dive
+  var DIVE_SPEED = 1.4 * VEL_SCALE; // PlayerState.DiveSpeed (full sprint dive)
+  var DIVE_SPEED_SHORT = 0.7 * VEL_SCALE; // short dive (ShortDiveAvailable)
+  var DIVE_HOP = -2 * VEL_SCALE; // AirVelocityY -= 2 on dive
   var SPRINT_DIVE_COST = 12; // DrainEnergy("SPRINT_DIVE")
   var TACKLE_ALIGN_X = 8; // CheckDivePlayerImpact: |midX diff| <= 8
   var TACKLE_ALIGN_Y = 10; // |midY diff| <= 10
@@ -338,7 +338,7 @@
   var SHORT_DIVE_WINDOW = 8; // _shortDiveTimer, expressed in 60 Hz steps
   // Dive impact damage (design choice, requested): only the tackled fighter
   // takes it; lowered from 12 so the catch itself does not decide the round.
-  var DIVE_IMPACT_DAMAGE = 5;
+  var DIVE_IMPACT_DAMAGE = 3;
 
   // ---------- Constants (extracted — wall collisions) ----------
   var EDGE_DISTANCE = 4; // PlayerState.PlayerEdgeDistance
@@ -427,6 +427,80 @@
   // ---------- Canvas ----------
   var canvas = document.getElementById('game');
   var ctx = canvas.getContext('2d');
+
+  // ---------- Optional player sprites (SVG shapes 592..634) ----------
+  var spriteImages = Object.create(null);
+  var spriteReady = false;
+  var spriteTotal = 0, spriteLoaded = 0;
+  var SPRITE_MAP = (typeof window !== 'undefined' && window.PLAYER_SPRITE_MAP) ? window.PLAYER_SPRITE_MAP : {};
+  if (typeof Image !== 'undefined') {
+    var _indices = [];
+    for (var _i = 592; _i <= 634; _i++) _indices.push(_i);
+    if (SPRITE_MAP) {
+      for (var _k in SPRITE_MAP) {
+        var _v = SPRITE_MAP[_k];
+        if (Array.isArray(_v)) { for (var _j = 0; _j < _v.length; _j++) _indices.push(_v[_j]); }
+        else _indices.push(_v);
+      }
+    }
+    // unique
+    var _seen = Object.create(null);
+    var _uniq = [];
+    for (var _u = 0; _u < _indices.length; _u++) {
+      if (!_seen[_indices[_u]]) { _seen[_indices[_u]] = true; _uniq.push(_indices[_u]); }
+    }
+    for (var _si = 0; _si < _uniq.length; _si++) {
+      (function (n) {
+        var img = new Image();
+        img.onload = function () { spriteLoaded++; if (spriteLoaded >= spriteTotal) spriteReady = true; };
+        img.onerror = function () { spriteLoaded++; if (spriteLoaded >= spriteTotal) spriteReady = true; };
+        spriteImages[n] = img;
+        spriteTotal++;
+        img.src = 'superfighters/shapes/' + n + '.svg';
+      })(_uniq[_si]);
+    }
+  }
+
+  function playerSpriteKey(p) {
+    if (p.knockedDown) return 'knockedDown';
+    if (p.rolling) return 'roll';
+    if (p.diving) return 'dive';
+    if (p.falling) return 'fall';
+    if (p.punching) return 'attack';
+    if (p.aiming) return 'guard';
+    if (p.kickFlash > 0) {
+      if (!p.onGround || p.jumpKickPerformed || p.jumpKickQueued) return 'kickWithJump';
+      return 'kick';
+    }
+    if (!p.onGround) return p.airVelocityY < 0 ? 'jump' : 'fall';
+    if (p.pressDownKey && p.pressDownKey() && !p.running) return 'crouch';
+    if (p.running) return p.sprinting ? 'run' : 'walk';
+    return 'idle';
+  }
+
+  function drawPlayerSprite(p) {
+    if (!spriteReady) return false;
+    var key = playerSpriteKey(p);
+    var entry = SPRITE_MAP[key];
+    if (entry == null) return false;
+    var frameIndex = 0;
+    if (Array.isArray(entry)) {
+      var divisor = (key === 'attack') ? 4 : 8;
+      var counter = (key === 'attack') ? (p.punchFrame || 0) : (p.walkFrame || 0);
+      frameIndex = Math.floor(counter / divisor) % entry.length;
+    }
+    var idx = Array.isArray(entry) ? entry[frameIndex] : entry;
+    var img = spriteImages[idx];
+    if (!img || !img.complete || !img.naturalWidth) return false;
+    ctx.save();
+    ctx.translate(p.x + p.w / 2, p.y + p.h);
+    if (p.lastDirX < 0) ctx.scale(-1, 1);
+    var h = p.h;
+    var w = img.naturalWidth * (h / img.naturalHeight);
+    ctx.drawImage(img, -w / 2, -h, w, h);
+    ctx.restore();
+    return true;
+  }
 
   // ---------- Input ----------
   var keys = Object.create(null);
@@ -621,7 +695,7 @@
   // inverseX=false). Teleport preserves vertical offset within the door and moves to the
   // target door's center; trigger only while moving in the door direction.
   var doorPortals = [
-    { x: 848 - MAP_AREA.x, y: 218 - MAP_AREA.y, w: 20, h: 44, target: 1 }, // upper entrance
+    { x: 848 - MAP_AREA.x, y: 228 - MAP_AREA.y, w: 20, h: 44, target: 1 }, // upper entrance
     { x: 848 - MAP_AREA.x, y: 344 - MAP_AREA.y, w: 20, h: 44, target: 0 }  // lower entrance
   ];
 
@@ -869,6 +943,7 @@
 
     // Map portals (extracted Police Station doors)
     this.portalCooldown = 0;
+    this._portalLocked = false;
 
     // Wall collisions (extracted model)
     this.wallJumping = false; // blocks re-jumps until landing
@@ -881,6 +956,7 @@
     // Phase 4: weapons + jump-kick (extracted model)
     this.equipped = MELEE_WEAPONS.fists;
     this.airbornTimer = 0; // AirbornTimer += game_speed while Jumping
+    this.softLandingTimer = 0;
     this.jumpKickPerformed = false; // one jump-kick per air time
     this.jumpKickQueued = false;
 
@@ -1476,6 +1552,7 @@
     if (this.kickFlash > 0) this.kickFlash--;
     if (this.hitFlash > 0) this.hitFlash--;
     if (this.stunTimer > 0) this.stunTimer--; // _stunTimer -= game_speed
+    if (this.softLandingTimer > 0) this.softLandingTimer--;
     if (this.portalCooldown > 0) this.portalCooldown--;
     if (this.staggering) {
       this.staggerTimer--;
@@ -1618,7 +1695,7 @@
       if (this.pressLeft()) this.lastDirX = -1;
       if (this.pressRight()) this.lastDirX = 1;
       // Aim square (extracted AimLazer: _aim_mc floats near the muzzle)
-      if (this.aimMode === 0) this.aimSquare = this.calculateAimSquare(other);
+      this.aimSquare = this.calculateAimSquare(other);
       // Grenade fuse cooks while held; zero -> explodes in your hand
       if (this.aimMode === 1) {
         this.throwTimer--;
@@ -1636,10 +1713,6 @@
         if (!this.aiming && this.ranged) {
           this.aiming = true;
           this.aimMode = 0;
-        } else if (!this.aiming && this.throwable && this.throwable.ammo > 0) {
-          this.aiming = true;
-          this.aimMode = 1;
-          this.throwTimer = GRENADE.throwTimer;
         }
       } else {
         this.startAimASAP = true;
@@ -1797,6 +1870,7 @@
 
     // ---------- Movement ----------
     if (dir !== 0) {
+      if (dir < 0) this._portalLocked = false;
       this.lastDirX = dir;
       if (this.onGround) {
         this.airVelocityX = dir * (this.sprinting ? SPRINT_RUN_SPEED : PLAYER_RUN_SPEED);
@@ -2064,6 +2138,9 @@
         this.knockedDown = true;
         this.knockedDownFrame = 0;
         this.checkFallOnPlayer(other);
+      } else {
+        // Soft landing: low-impact touchdown, play soft landing sprite briefly
+        this.softLandingTimer = 8;
       }
     } else if (this.onGround && !this.falling && !this.diving) {
       if (this.groundedPlatform && this.groundedPlatform.elevator && !this.performJumpDown) {
@@ -2160,12 +2237,13 @@
 
     // Map portals (extracted Police Station): pass through the black entrance
     // to teleport to the other one.
-    if (this.portalCooldown <= 0 && !this.grabbedBy && this.hp > 0 && this.lastDirX > 0) {
+    if (this.portalCooldown <= 0 && !this.grabbedBy && this.hp > 0 && this.lastDirX > 0 && !this._portalLocked) {
       var px = this.x + this.w / 2;
       var py = this.y + this.h / 2;
       for (var pi2 = 0; pi2 < doorPortals.length; pi2++) {
         var d = doorPortals[pi2];
-        if (px < d.x || px > d.x + d.w) continue;
+        if (px < d.x - 24) continue;
+        if (px > d.x + d.w) continue;
         if (py < d.y || py > d.y + d.h) continue;
         var dt = doorPortals[d.target];
         var res = this.getTargetPos(dt, d, px, py);
@@ -2174,6 +2252,7 @@
         this.airVelocityX = 0;
         this.airVelocityY = 0;
         this.portalCooldown = 20;
+        this._portalLocked = true;
         this.onGround = false;
         this.groundedPlatform = null;
         updateCamera(true);
@@ -2445,7 +2524,8 @@
       // Slicked-back dark hair + sunglasses band
       px(hx, 0, 18, 4, c.hair);
       px(hx, 4, 4, 3, c.hair); // back of the hair
-      px(hx + 2, 5, 15, 3, '#0c0c10'); // sunglasses
+      px(hx + 1, 4, 16, 4, '#0c0c10'); // sunglasses band
+      px(hx + 14, 5, 2, 2, '#3a7a8c'); // earpiece
       return;
     }
     if (s === 'mask') {
@@ -2600,6 +2680,7 @@
   }
 
   function drawPlayer(p) {
+    if (drawPlayerSprite(p)) return;
     // Grabbed pose: tumbled over the grabber's shoulder (GRABBED anim)
     if (p.grabbedBy) {
       ctx.save();
@@ -2732,7 +2813,7 @@
 
     // Aim indicator (extracted AimLazer): a small square floating at the ray's
     // end near the muzzle. The dotted LASER is SNIPER-ONLY (LaserSight flag)
-    if (p.aiming && p.aimMode === 0 && p.aimSquare) {
+    if (p.aiming && p.aimSquare) {
       var asx = p.aimSquare.x;
       var asy = p.aimSquare.y;
       ctx.fillStyle = 'rgba(255,255,255,0.85)';
@@ -3215,6 +3296,7 @@
     p.shortDiveAvailable = false;
     p.shortDiveTimer = 0;
     p.portalCooldown = 0;
+    p._portalLocked = false;
     p.climbing = false;
     p.wallJumping = false;
     p.wallPose = 0;
@@ -3229,8 +3311,7 @@
     p.reSprintWindow = 0;
     p.equipped = MELEE_WEAPONS.fists;
     p.ranged = null;
-    p.throwable = { ammo: GRENADE.ammo };    p.ranged = null;
-    p.throwable = null;
+    p.throwable = { ammo: GRENADE.ammo };
     p.aiming = false;
     p.aimMode = 0;
     p.aimPitch = 0;
@@ -3837,9 +3918,6 @@
     for (var i = 0; i < platforms.length; i++) drawPlatform(platforms[i]);
     drawGlassShards();
     for (i = 0; i < hangingLamps.length; i++) drawHangingLamp(hangingLamps[i]);
-    // Far-right wall entrances (extracted Police Station)
-    drawPortalEntrance(doorPortals[0], true);
-    drawPortalEntrance(doorPortals[1], false);
     for (var wi = 0; wi < weaponItems.length; wi++) {
       var item = weaponItems[wi];
       if (item.taken) continue;
@@ -3853,6 +3931,10 @@
     drawExplosions();
     drawPlayer(player1);
     drawPlayer(player2);
+    // Far-right wall entrances (extracted Police Station) — drawn on top so the
+    // player disappears as they enter the black door
+    drawPortalEntrance(doorPortals[0], true);
+    drawPortalEntrance(doorPortals[1], false);
     ctx.restore();
     drawHud();
   }

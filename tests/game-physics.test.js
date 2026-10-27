@@ -359,13 +359,13 @@ test('a dive onto a grounded fighter damages only the victim', () => {
   diver.checkDiveImpact(victim);
 
   assert.equal(diver.hp, 100, 'the diver takes no damage from the tackle');
-  assert.equal(victim.hp, 95, 'the tackled fighter takes the lowered 5');
+  assert.equal(victim.hp, 97, 'the tackled fighter takes the lowered 3');
   assert.equal(victim.grabbedBy, diver, 'the tackle still catches the victim');
 
   // The impact must only resolve once, not once per substep.
   diver.checkDiveImpact(victim);
   assert.equal(diver.hp, 100);
-  assert.equal(victim.hp, 95);
+  assert.equal(victim.hp, 97);
 });
 
 test('a tackle drop leaves the victim on the raised platform, never through it', () => {
@@ -841,7 +841,7 @@ test('double-tapping a movement direction sprints at twice the run speed', () =>
   game.step(); // re-press inside the window
 
   assert.equal(player.sprinting, true, 'the double-tap activates the sprint');
-  assert.equal(player.airVelocityX, 2.55, 'RunSpeed is doubled while sprinting');
+  assert.equal(player.airVelocityX, 3.4, 'RunSpeed is doubled while sprinting');
   assert.ok(player.shortDiveTimer > 0, 'the double-tap also arms the short dive');
 
   // Releasing a sprint and pressing again re-sprints immediately.
@@ -885,7 +885,7 @@ test('a slow re-press does not sprint', () => {
   game.step();
 
   assert.equal(player.sprinting, false);
-  assert.equal(player.airVelocityX, 1.275, 'it stays a normal run');
+  assert.equal(player.airVelocityX, 1.7, 'it stays a normal run');
 });
 
 test('Shift no longer activates the sprint', () => {
@@ -900,7 +900,7 @@ test('Shift no longer activates the sprint', () => {
   for (let frame = 0; frame < 5; frame++) game.step();
 
   assert.equal(player.sprinting, false);
-  assert.equal(player.airVelocityX, 1.275);
+  assert.equal(player.airVelocityX, 1.7);
 });
 
 test('walk and sprint use the tuned per-step pace at 60 Hz', () => {
@@ -910,13 +910,13 @@ test('walk and sprint use the tuned per-step pace at 60 Hz', () => {
   resetPlayer(player, 120, floor.y - player.h, true);
   player.groundedPlatform = floor;
 
-  // Tuned base pace: 1.275 px/step at 60 Hz => 76.5 px/s.
+  // Original pace: 1.7 px/step at 60 Hz => 102 px/s.
   const startX = player.x;
   keyDown(listeners, 'KeyD');
   for (let frame = 0; frame < 60; frame++) game.step();
   assert.ok(
-    Math.abs(player.x - startX - 76.5) < 0.01,
-    'one second of walking covers 1.275 px/step * 60 steps'
+    Math.abs(player.x - startX - 102) < 0.01,
+    'one second of walking covers 1.7 px/step * 60 steps'
   );
 
   // Sprint is 2x run speed and drains 1.2 per step:
