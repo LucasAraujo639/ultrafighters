@@ -428,36 +428,24 @@
   var canvas = document.getElementById('game');
   var ctx = canvas.getContext('2d');
 
-  // ---------- Optional player sprites (SVG shapes 592..634) ----------
+  // ---------- Optional player sprites (per-frame PNGs from the Agent MovieClip) ----------
   var spriteImages = Object.create(null);
   var spriteReady = false;
   var spriteTotal = 0, spriteLoaded = 0;
   var SPRITE_MAP = (typeof window !== 'undefined' && window.PLAYER_SPRITE_MAP) ? window.PLAYER_SPRITE_MAP : {};
+  var SPRITE_DIR = 'superfighters/sprites/DefineSprite_1245_player_agent';
+  var SPRITE_FRAME_COUNT = 56; // numbered timeline frames of the assembled character
+  var SPRITE_BASE_HEIGHT = 48; // natural canvas height of every frame PNG
   if (typeof Image !== 'undefined') {
-    var _indices = [];
-    for (var _i = 592; _i <= 634; _i++) _indices.push(_i);
-    if (SPRITE_MAP) {
-      for (var _k in SPRITE_MAP) {
-        var _v = SPRITE_MAP[_k];
-        if (Array.isArray(_v)) { for (var _j = 0; _j < _v.length; _j++) _indices.push(_v[_j]); }
-        else _indices.push(_v);
-      }
-    }
-    // unique
-    var _seen = Object.create(null);
-    var _uniq = [];
-    for (var _u = 0; _u < _indices.length; _u++) {
-      if (!_seen[_indices[_u]]) { _seen[_indices[_u]] = true; _uniq.push(_indices[_u]); }
-    }
-    for (var _si = 0; _si < _uniq.length; _si++) {
+    for (var _si = 1; _si <= SPRITE_FRAME_COUNT; _si++) {
       (function (n) {
         var img = new Image();
         img.onload = function () { spriteLoaded++; if (spriteLoaded >= spriteTotal) spriteReady = true; };
         img.onerror = function () { spriteLoaded++; if (spriteLoaded >= spriteTotal) spriteReady = true; };
         spriteImages[n] = img;
         spriteTotal++;
-        img.src = 'superfighters/shapes/' + n + '.svg';
-      })(_uniq[_si]);
+        img.src = SPRITE_DIR + '/' + n + '.png';
+      })(_si);
     }
   }
 
@@ -495,10 +483,10 @@
     ctx.save();
     ctx.translate(p.x + p.w / 2, p.y + p.h);
     if (p.lastDirX < 0) ctx.scale(-1, 1);
-    // Shared scale: every sprite keeps the idle sprite's pixel density so wide
-    // frames (fall 19x19, dive 23x12) never render taller or wider than the body
-    var SPRITE_BASE_HEIGHT = 21; // natural height of the idle sprite (592)
-    var k = p.h / SPRITE_BASE_HEIGHT;
+    // Uniform frame scale: every frame PNG shares the same 47x48 canvas, so the
+    // full canvas maps onto the collider height (tunable via PLAYER_SPRITE_SCALE)
+    var userScale = (typeof window !== 'undefined' && window.PLAYER_SPRITE_SCALE) || 1;
+    var k = (p.h * userScale) / SPRITE_BASE_HEIGHT;
     var w = img.naturalWidth * k;
     var h = img.naturalHeight * k;
     ctx.drawImage(img, -w / 2, -h, w, h);
