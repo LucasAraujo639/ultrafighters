@@ -495,8 +495,12 @@
     ctx.save();
     ctx.translate(p.x + p.w / 2, p.y + p.h);
     if (p.lastDirX < 0) ctx.scale(-1, 1);
-    var h = p.h;
-    var w = img.naturalWidth * (h / img.naturalHeight);
+    // Shared scale: every sprite keeps the idle sprite's pixel density so wide
+    // frames (fall 19x19, dive 23x12) never render taller or wider than the body
+    var SPRITE_BASE_HEIGHT = 21; // natural height of the idle sprite (592)
+    var k = p.h / SPRITE_BASE_HEIGHT;
+    var w = img.naturalWidth * k;
+    var h = img.naturalHeight * k;
     ctx.drawImage(img, -w / 2, -h, w, h);
     ctx.restore();
     return true;
