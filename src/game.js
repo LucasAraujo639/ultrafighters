@@ -271,6 +271,10 @@
   var ENERGY_COST_JUMP = 5; // DrainEnergy("JUMP")
   var ENERGY_COST_SPRINT_JUMP = 12; // DrainEnergy("SPRINT_JUMP")
   var COMBO_LINKS = 3; // PunchComboNr cap
+  // Passive HP regen (extracted PlayerState): after HP_DAMAGE_REGEN_DELAY steps
+  // without taking damage, HP recovers 0.1 per step (0.1 * game_speed).
+  var HP_REGEN_RATE = 0.1 * VEL_SCALE;
+  var HP_DAMAGE_REGEN_DELAY = 24 * 3 * TICKS_TO_STEPS; // 24 * 3 ticks -> 72 steps
   var COMBO_HIT_FRAME = [4, 5, 6]; // HitPunchComboFrame per link (frame where the punch connects)
   var COMBO_MIN_FRAME = [6, 7, 8]; // MinPunchComboFrame per link (earliest frame to chain the next)
   var COMBO_STUN_BASE = [3, 4, 5]; // HitPunchStunTime base + 5 * random
@@ -916,6 +920,7 @@
     this.jumpPushTimeLeft = 0;
     this.falling = false;
     this.hp = 100;
+    this.hpDamageTimer = 0; // blocks passive regen after taking a hit
 
     // Sprint state (extracted model)
     this.running = false;
@@ -1039,6 +1044,16 @@
     if (this.sprintEnergy < 0) this.sprintEnergy = 0; // setter clamps at 0
   };
 
+  // HP setter (extracted): dead fighters take no further damage, and any hit
+  // that lowers HP arms the regen block (24*3 steps without healing)
+  Player.prototype.damage = function (amount) {
+    if (this.hp <= 0) return;
+    if (amount < this.hp) this.hpDamageTimer = HP_DAMAGE_REGEN_DELAY;
+    this.hp -= amount;
+    if (this.hp <= 0) this.hp = 0;
+    if (this.hp > 100) this.hp = 100;
+  };
+
   Player.prototype.beginJump = function () {
     // BeginJump: blocked under a low ceiling (extracted: CollisionHead(-2) gate)
     var probe = this.getBounds();
@@ -1107,7 +1122,7 @@
     }
     // Damage only applies to a live victim (HP -= damage gated on HP > 0)
     if (other.hp > 0) {
-      other.hp -= this.equipped.damage[this.punchComboNr - 1]; // fists 6/7/8
+      other.damage(this.equipped.damage[this.punchComboNr - 1]); // fists 6/7/8
       other.hitFlash = 6;
     }
 
@@ -1386,7 +1401,7 @@
       return;
     }
     // DIVE IMPACT (requested): only the tackled fighter takes damage.
-    other.hp -= DIVE_IMPACT_DAMAGE;
+    other.damage(DIVE_IMPACT_DAMAGE);
     other.hitFlash = 6;
     // TACKLE CATCH: the victim is GRABBED and dragged along the dive
     // (extracted: GrabbedPlayerNr auto-arms _grabbed_player + GRABBED anim)
@@ -1405,7 +1420,7 @@
     if (Math.abs(myCx - theirCx) > TACKLE_ALIGN_X) return;
     // Same support level: a landing on a higher shelf must not hit someone below.
     if (Math.abs(this.y + this.h - (other.y + other.h)) > TACKLE_ALIGN_Y) return;
-    other.hp -= FALL_ON_PLAYER_DAMAGE;
+    other.damage(FALL_ON_PLAYER_DAMAGE);
     other.hitFlash = 6;
     if (other.aiming) other.abortAiming(true);
     other.stunTimer = 0;
@@ -1542,7 +1557,7 @@
     other.airVelocityY = KICK_KNOCKBACK_Y;
     other.onGround = false;
     other.groundedPlatform = null;
-    other.hp -= KICK_DAMAGE; // KickDamage: 4
+    other.damage(KICK_DAMAGE); // KickDamage: 4
     other.hitFlash = 6;
     if (Math.random() < 0.5) {
       other.falling = true; // ragdoll fall; lands into Knockdowned
@@ -1696,6 +1711,15 @@
     if (this.sprinting && (dir === 0 || this.sprintEnergy <= 0)) this.sprinting = false;
 
     // ---------- Energy drain / regen (OnGround, game_speed = 1) ----------
+    // Passive HP regen (extracted): heal 0.1/step once no damage was taken for
+    // HP_DAMAGE_REGEN_DELAY steps. The extracted HP setter refuses every write
+    // while dead (_hp <= 0 -> return), so a downed fighter never self-revives.
+    if (this.hp > 0 && this.hp < 100 && this.hpDamageTimer <= 0) {
+      this.hp += HP_REGEN_RATE * gameSpeed;
+      if (this.hp > 100) this.hp = 100;
+    } else if (this.hpDamageTimer > 0) {
+      this.hpDamageTimer -= gameSpeed;
+    }
     if (this.onGround) {
       if (this.sprinting && this.running) {
         this.sprintEnergy -= SPRINT_DRAIN;
@@ -2181,7 +2205,7 @@
         var impact = Math.abs(landVy) - 3;
         impact *= 1.5;
         if (impact < 3) impact = 0;
-        this.hp -= impact;
+        this.damage(impact);
         this.knockedDown = true; // IncreaseKnockdownGrade + Knockdowned = true
         this.knockedDownFrame = 0;
         if (landVy >= FALL_TRIGGER_SPEED) this.checkFallOnPlayer(other);
@@ -2195,7 +2219,7 @@
         var hardImpact = Math.abs(landVy) - 3;
         hardImpact *= 1.5;
         if (hardImpact < 3) hardImpact = 0;
-        this.hp -= hardImpact;
+        this.damage(hardImpact);
         this.knockedDown = true;
         this.knockedDownFrame = 0;
         this.checkFallOnPlayer(other);
@@ -3060,7 +3084,7 @@
             b.x > p.x && b.x < p.x + p.w &&
             b.y > p.y && b.y < p.y + p.h
           ) {
-            p.hp -= b.crit ? b.damage + b.critDamage : b.damage;
+            p.damage(b.crit ? b.damage + b.critDamage : b.damage);
             p.hitFlash = 6;
             var kb = BULLET_KNOCKBACK * (p.onGround ? 1 : BULLET_AERIAL_KNOCKBACK_MULT);
             p.airVelocityX = b.vx > 0 ? kb : -kb;
@@ -3088,7 +3112,7 @@
       var dist = Math.sqrt(dx * dx + dy * dy);
       if (dist > GRENADE.radius) continue;
       var falloff = 1 - dist / GRENADE.radius;
-      p.hp -= GRENADE.damageMin + (GRENADE.damageMax - GRENADE.damageMin) * falloff;
+      p.damage(GRENADE.damageMin + (GRENADE.damageMax - GRENADE.damageMin) * falloff);
       p.hitFlash = 6;
       var kb = 6 * VEL_SCALE * falloff;
       p.airVelocityX = (dx >= 0 ? 1 : -1) * kb;

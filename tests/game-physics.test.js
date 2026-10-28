@@ -973,3 +973,23 @@ test('the fixed-step simulation is consistent at 30, 60, and 144 render FPS', ()
     assert.ok(Math.abs(state.cameraZoom - reference.cameraZoom) < 1e-7);
   }
 });
+
+test('damaged fighters passively regen HP after the extracted delay', () => {
+  const { game } = createGame();
+  const player = game.players[0];
+  player.damage(40); // 100 -> 60, arms the 72-step regen block
+  assert.equal(player.hp, 60);
+  for (let frame = 0; frame < 72; frame++) game.step();
+  assert.equal(player.hp, 60, 'no regen during the 72-step damage window');
+  for (let frame = 0; frame < 60; frame++) game.step();
+  assert.ok(Math.abs(player.hp - 66) < 1e-6, '0.1 HP per step after the delay');
+});
+
+test('a dead fighter never regenerates back to life', () => {
+  const { game } = createGame();
+  const player = game.players[0];
+  player.hp = 0;
+  for (let frame = 0; frame < 100; frame++) game.step(); // before the auto-restart
+  assert.ok(game.roundOver !== null, 'the kill still registers');
+  assert.equal(player.hp, 0, 'no passive revive from 0 HP');
+});
