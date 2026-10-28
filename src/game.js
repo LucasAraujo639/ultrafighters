@@ -2596,14 +2596,42 @@
 
   function drawPlatform(p) {
     if (p.elevator) return drawElevator(p);
-    if (p.glass) { drawGlassPane(p); return drawTileOutline(p, '#9eeaf2'); }
+    if (p.glass) return drawGlassPane(p);
     if (p.shape === 'polygon') return drawPolygonPlatform(p);
     if (p.shape === 'circle') return drawCirclePlatform(p);
-    if (p.ladder) { drawLadder(p.x, p.y, p.w, p.h); return drawTileOutline(p, '#ffd34d'); }
+    if (p.ladder) return drawLadder(p.x, p.y, p.w, p.h);
     if (p.cloud) { drawCloudShelf(p.x, p.y, p.w, p.h); return drawTileOutline(p, '#ff5050'); }
     if (p.material === 'Metal') { drawMetalBox(p.x, p.y, p.w, p.h); return drawTileOutline(p, '#40e0ff'); }
+    if (p.x < STATION.x0 - 40 && p.w > 100) return drawOutdoorGround(p);
+    if (p.w > 90) return drawConcreteSlab(p.x, p.y, p.w, p.h);
     drawBrickWall(p.x, p.y, p.w, p.h);
-    drawTileOutline(p, '#40e0ff');
+  }
+
+  // Concrete floor slabs (the station's floors): light gray with white top edge
+  function drawConcreteSlab(x, y, w, h) {
+    px(x, y, w, h, '#b6bac2');
+    px(x, y, w, 3, '#e8ecf0'); // white top edge
+    px(x, y + 3, w, 1, '#9aa0aa');
+    px(x, y + h - 3, w, 3, '#7a7e88'); // bottom shadow
+    var rand = mulberry32(Math.floor(x * 31 + y * 17));
+    for (var m = 0; m < w / 26; m++) {
+      var mx = x + 4 + rand() * (w - 8);
+      var my = y + 6 + rand() * Math.max(1, h - 10);
+      px(mx, my, 2, 1, '#9aa0aa'); // speckles
+    }
+  }
+
+  // The outdoor ground: olive-yellow turf with pebbles (left side of the map)
+  function drawOutdoorGround(p) {
+    px(p.x, p.y, p.w, p.h, '#6a6a2e');
+    px(p.x, p.y, p.w, 6, '#b0b050'); // turf top
+    px(p.x, p.y, p.w, 2, '#d0d068');
+    var rand = mulberry32(Math.floor(p.x * 13 + p.y * 7));
+    for (var peb = 0; peb < p.w / 9; peb++) {
+      var gx = p.x + rand() * p.w;
+      var gy = p.y + 7 + rand() * Math.max(1, p.h - 10);
+      px(gx, gy, 3, 2, rand() > 0.5 ? '#8a8a3e' : '#565624');
+    }
   }
 
   function px(x, y, w, h, color) {
@@ -3985,17 +4013,241 @@
     }
   }
 
+  var STATION = { x0: 470 }; // where the police station facade begins
+
+  // ---------- Map dressing (Police Station pixel-art, procedural) ----------
+  function drawCrate(x, yBottom, size) {
+    // Wooden crate: planks + diagonal cross, like the original's AddBox props
+    var s = size || 16;
+    var y = yBottom - s;
+    px(x, y, s, s, WOOD.base);
+    px(x, y, s, 2, WOOD.light);
+    px(x, y + s - 2, s, 2, WOOD.dark);
+    px(x, y, 2, s, WOOD.light);
+    px(x + s - 2, y, 2, s, WOOD.dark);
+    ctx.strokeStyle = WOOD.light;
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(x + 2, y + 2); ctx.lineTo(x + s - 2, y + s - 2);
+    ctx.moveTo(x + s - 2, y + 2); ctx.lineTo(x + 2, y + s - 2);
+    ctx.stroke();
+  }
+
+  function drawBarrel(x, yBottom) {
+    var w = 13, h = 17, y = yBottom - h;
+    px(x, y, w, h, '#c04038');
+    px(x, y, w, 2, '#e06a58');
+    px(x, y + h - 2, w, 2, '#802820');
+    px(x, y + 4, w, 2, '#802820');
+    px(x, y + h - 7, w, 2, '#802820');
+    px(x + 1, y + 2, 2, h - 4, 'rgba(255,255,255,0.15)');
+  }
+
+  function drawFence(x0, x1, groundY) {
+    // Chain-link fence: posts + two wires + diamond hint
+    ctx.strokeStyle = '#5a6a72';
+    ctx.lineWidth = 1;
+    for (var x = x0; x <= x1; x += 62) {
+      px(x, groundY - 34, 3, 34, '#8a949c');
+      px(x - 1, groundY - 36, 5, 3, '#8a949c');
+    }
+    ctx.beginPath();
+    ctx.moveTo(x0, groundY - 30); ctx.lineTo(x1, groundY - 30);
+    ctx.moveTo(x0, groundY - 16); ctx.lineTo(x1, groundY - 16);
+    ctx.moveTo(x0, groundY - 3); ctx.lineTo(x1, groundY - 3);
+    ctx.stroke();
+    ctx.strokeStyle = 'rgba(120,140,150,0.35)';
+    ctx.beginPath();
+    for (var d = x0; d < x1; d += 8) {
+      ctx.moveTo(d, groundY - 30); ctx.lineTo(d + 6, groundY - 3);
+      ctx.moveTo(d + 6, groundY - 30); ctx.lineTo(d, groundY - 3);
+    }
+    ctx.stroke();
+  }
+
+  function drawWindmill(x, baseY) {
+    // Tower: tapering teal truss with cross braces
+    var topY = baseY - 250;
+    var halfBase = 26, halfTop = 9;
+    ctx.strokeStyle = '#2e9c8a';
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.moveTo(x - halfBase, baseY); ctx.lineTo(x - halfTop, topY + 14);
+    ctx.moveTo(x + halfBase, baseY); ctx.lineTo(x + halfTop, topY + 14);
+    ctx.stroke();
+    ctx.lineWidth = 2;
+    for (var lvl = 1; lvl <= 6; lvl++) {
+      var t = lvl / 6;
+      var y = baseY - (baseY - topY - 14) * t;
+      var half = halfBase + (halfTop - halfBase) * t;
+      ctx.beginPath();
+      ctx.moveTo(x - half, y); ctx.lineTo(x + half, y); // ring
+      if (lvl < 6) {
+        var t2 = (lvl + 1) / 6;
+        var y2 = baseY - (baseY - topY - 14) * t2;
+        var half2 = halfBase + (halfTop - halfBase) * t2;
+        ctx.moveTo(x - half, y); ctx.lineTo(x + half2, y2); // brace
+        ctx.moveTo(x + half, y); ctx.lineTo(x - half2, y2);
+      }
+      ctx.stroke();
+    }
+    // Hub + 8 spinning blades (windmill_propeller)
+    var hubX = x, hubY = topY;
+    var angle = Date.now() / 1000 * 0.9;
+    ctx.strokeStyle = '#d8dce4';
+    ctx.lineWidth = 3;
+    for (var b = 0; b < 8; b++) {
+      var a = angle + (b * Math.PI) / 4;
+      var dx = Math.cos(a), dy = Math.sin(a);
+      ctx.beginPath();
+      ctx.moveTo(hubX + dx * 6, hubY + dy * 6);
+      ctx.lineTo(hubX + dx * 52, hubY + dy * 52);
+      ctx.stroke();
+      // paddle
+      var px0 = hubX + dx * 20, py0 = hubY + dy * 20;
+      ctx.save();
+      ctx.translate(px0, py0);
+      ctx.rotate(a + Math.PI / 2);
+      ctx.fillStyle = '#e8ecf4';
+      ctx.fillRect(-2, -3, 30, 6);
+      ctx.restore();
+    }
+    px(hubX - 4, hubY - 4, 8, 8, '#1a1e28');
+  }
+
+  function drawSignPost(x, yBottom) {
+    px(x - 1, yBottom - 26, 3, 26, '#c8ccd4');
+    px(x - 8, yBottom - 38, 16, 13, '#e8e4da');
+    ctx.strokeStyle = '#d0453a';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(x - 5, yBottom - 35); ctx.lineTo(x + 5, yBottom - 28);
+    ctx.moveTo(x + 5, yBottom - 35); ctx.lineTo(x - 5, yBottom - 28);
+    ctx.stroke();
+  }
+
+  function drawJailWindow(x, y, w, h) {
+    // Dark window with white bars (the station's cell windows)
+    px(x - 2, y - 2, w + 4, h + 4, '#c8ccd4'); // frame
+    px(x, y, w, h, '#05060a');
+    var bars = Math.max(3, Math.floor(w / 12));
+    for (var b = 0; b < bars; b++) {
+      px(x + 3 + (b * (w - 6)) / Math.max(1, bars - 1) - 1, y, 2, h, '#e8ecf4');
+    }
+    px(x, y + h / 2 - 1, w, 2, '#e8ecf4'); // horizontal bar
+  }
+
+  function drawRedLamas(x, y, w, h) {
+    // The red slatted wall of the ground floor
+    px(x, y, w, h, '#1a0f0c');
+    for (var ly = y + 2; ly < y + h - 2; ly += 6) {
+      px(x + 2, ly, w - 4, 4, '#b03828');
+      px(x + 2, ly, w - 4, 1, '#d85848');
+    }
+    for (var pxl = x + 4; pxl < x + w - 4; pxl += 26) {
+      px(pxl, y + 2, 3, h - 4, '#701e18'); // vertical dividers
+    }
+  }
+
+  function drawShelfUnit(x, yBottom, w, h) {
+    var y = yBottom - h;
+    px(x, y, 3, h, '#8a8f96');
+    px(x + w - 3, y, 3, h, '#8a8f96');
+    for (var sy = y + 14; sy < yBottom - 2; sy += 18) {
+      px(x, sy, w, 2, '#9aa2ab');
+      drawCrate(x + 7, sy, 11);
+      px(x + w - 20, sy - 8, 12, 8, '#c04038'); // small crate on the shelf
+    }
+    ctx.strokeStyle = '#6a7482';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(x + 3, y + 3); ctx.lineTo(x + w - 3, yBottom - 3);
+    ctx.moveTo(x + w - 3, y + 3); ctx.lineTo(x + 3, yBottom - 3);
+    ctx.stroke();
+  }
+
+  function drawPipe(x, y, w, h) {
+    px(x, y, w, h, '#2e9c8a');
+    px(x, y, w, 2, '#5ec4b2');
+    if (h > w) {
+      px(x - 2, y + 8, w + 4, 3, '#1a6e60');
+      px(x - 2, y + h - 12, w + 4, 3, '#1a6e60');
+    }
+  }
+
+  function drawConcreteSteps(x0, groundY) {
+    // The concrete staircase by the station's left edge
+    for (var i = 0; i < 4; i++) {
+      var w = 50 + i * 12;
+      var x = x0 + (3 - i) * 12 - 12;
+      var y = groundY + 14 + i * 14;
+      px(x, y, w, 14, '#b6bac2');
+      px(x, y, w, 2, '#e8ecf0');
+      px(x, y + 12, w, 2, '#7a7e88');
+    }
+  }
+
+  function drawMapDressing(viewX, viewW) {
+    var right = viewX + viewW;
+    function vis(x, w) { return x + w >= viewX && x <= right; }
+    // ---- exterior side ----
+    if (viewX < STATION.x0) {
+      drawFence(6, 376, 459);
+      drawWindmill(168, 459);
+      drawSignPost(19, 386);
+      // props on the outdoor floor
+      drawCrate(40, 459); drawCrate(56, 459); drawCrate(48, 443);
+      drawBarrel(96, 459);
+      drawCrate(330, 459); drawBarrel(348, 459);
+      drawBarrel(104, 396); // on the low cloud shelf
+      drawCrate(300, 352, 13); // on the upper cloud shelf
+    }
+    // ---- station side ----
+    // ground floor: windows + red slats + pipe
+    if (vis(620, 200)) {
+      drawJailWindow(628, 478, 56, 54);
+      drawRedLamas(700, 476, 96, 68);
+      drawPipe(612, 476, 6, 66);
+      drawBarrel(560, 466);
+    }
+    // first floor
+    if (vis(450, 300)) {
+      drawJailWindow(470, 356, 56, 48);
+      drawJailWindow(560, 356, 56, 48);
+      drawShelfUnit(655, 339, 55, 76);
+      drawCrate(470, 339); drawCrate(486, 339);
+      drawPipe(735, 345, 5, 60);
+    }
+    // second floor
+    if (vis(450, 300)) {
+      drawJailWindow(470, 266, 56, 48);
+      drawJailWindow(640, 266, 60, 48);
+      drawCrate(760, 261); drawBarrel(740, 261);
+    }
+    // top ledge props
+    if (vis(450, 300)) drawCrate(520, 249, 13);
+    drawConcreteSteps(560, 512);
+  }
+
   function drawBackdrop(viewX, viewY, viewW, viewH) {
-    // Procedural fallback. Original MapStart assets (background_clouds and
-    // fan_1..fan_4) are not included in this workspace.
-    // The wall covers the whole visible world, so zooming out never exposes a
-    // black band. The rect starts on the world grid so the brick pattern stays
-    // anchored while the camera pans and zooms.
-    var wallX = Math.floor(viewX / TILE) * TILE;
-    var wallY = Math.floor(viewY / 14) * 14;
-    drawBrickWall(wallX, wallY, viewX + viewW - wallX, viewY + viewH - wallY);
-    // The level's outer top edge (world y = 0)
-    if (viewY <= 0 && viewY + viewH > 0) px(viewX, 0, viewW, 2, BRICK.light);
+    var left = viewX, right = viewX + viewW;
+    var top = Math.max(viewY, -300);
+    var skyBottom = 460; // the horizon line: ground sits at ~459
+    // Sky gradient (blue, brighter at the top like the screenshot)
+    var grad = ctx.createLinearGradient(0, top, 0, skyBottom);
+    grad.addColorStop(0, '#2226e0');
+    grad.addColorStop(1, '#1012a2');
+    ctx.fillStyle = grad;
+    ctx.fillRect(left, top, viewW, skyBottom - top);
+    if (viewY + viewH > skyBottom) {
+      px(left, skyBottom, viewW, viewY + viewH - skyBottom, '#0a0c10');
+    }
+    // The station interior is a dark hall, not open sky
+    px(STATION.x0, top, GAME_WIDTH - STATION.x0, viewY + viewH - top, '#0b0d13');
+    drawClouds(left, right, viewY, viewH);
+    drawSkyline(left, right, viewY, viewH);
+    // Right brick facade column (the map's right edge)
+    if (right > GAME_WIDTH - 22) drawBrickWall(GAME_WIDTH - 22, top, 22, viewY + viewH - top);
     // A dark vignette at the pit bottom (below the floors)
     var pit = ctx.createLinearGradient(0, 460, 0, GAME_HEIGHT);
     pit.addColorStop(0, 'rgba(10,12,16,0)');
@@ -4003,6 +4255,63 @@
     ctx.fillStyle = pit;
     ctx.fillRect(viewX, 460, viewW, GAME_HEIGHT - 460);
   }
+
+  // Deterministic PRNG so clouds/skyline don't reshuffle every frame
+  function mulberry32(seed) {
+    return function () {
+      seed |= 0; seed = (seed + 0x6D2B79F5) | 0;
+      var t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
+      t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+  }
+
+  function drawClouds(left, right, viewY, viewH) {
+    if (viewY > 340) return;
+    var cell = 150;
+    var c0 = Math.floor((left - 100) / cell), c1 = Math.ceil((right + 100) / cell);
+    for (var c = c0; c <= c1; c++) {
+      if (c % 3 === 0) continue; // gaps between clouds
+      var rand = mulberry32(c * 7919 + 13);
+      var x = c * cell + rand() * 60;
+      var y = 40 + rand() * 300;
+      if (x > STATION.x0 - 40) continue;
+      var w = 46 + rand() * 50;
+      var h = 10 + rand() * 8;
+      ctx.fillStyle = '#3a3ee8';
+      // cloud silhouette: base slab + bumps on top
+      ctx.fillRect(x, y + h, w, 6);
+      var bumps = 3 + Math.floor(rand() * 3);
+      for (var b = 0; b < bumps; b++) {
+        var bw = w / bumps;
+        var bh = h + rand() * 10;
+        ctx.fillRect(x + b * bw, y + h - bh, bw, bh);
+      }
+    }
+  }
+
+  function drawSkyline(left, right, viewY, viewH) {
+    if (viewY > 460) return;
+    var cell = 34;
+    var c0 = Math.floor(left / cell), c1 = Math.ceil(right / cell);
+    for (var c = c0; c <= c1; c++) {
+      if (c * cell > STATION.x0 - 20) break;
+      var rand = mulberry32(c * 104729 + 7);
+      var w = cell - 4 - rand() * 8;
+      var h = 40 + rand() * 75;
+      var x = c * cell + 2;
+      var y = 459 - h;
+      px(x, y, w, h, '#151570');
+      if (rand() > 0.55) {
+        // chimney
+        px(x + w * 0.3, y - 14 - rand() * 10, 4, 16, '#151570');
+      }
+      if (rand() > 0.7) {
+        px(x + 3, y + 8, w - 6, 2, '#1c1c86'); // window strip
+      }
+    }
+  }
+
 
   function drawHangingLamp(l) {
     // The source anchor, 20 px rope, and lamp body 4 px below the rope end.
@@ -4031,6 +4340,7 @@
     ctx.scale(camera.zoom, camera.zoom);
     ctx.translate(-camera.x, -camera.y);
     drawBackdrop(camera.x - viewW / 2, camera.y - viewH / 2, viewW, viewH);
+    drawMapDressing(camera.x - viewW / 2, viewW);
     for (var i = 0; i < platforms.length; i++) drawPlatform(platforms[i]);
     drawGlassShards();
     for (i = 0; i < hangingLamps.length; i++) drawHangingLamp(hangingLamps[i]);
