@@ -270,15 +270,23 @@
   var REGEN_IDLE = 2 * VEL_SCALE; // 2/step
   var ENERGY_COST_JUMP = 5; // DrainEnergy("JUMP")
   var ENERGY_COST_SPRINT_JUMP = 12; // DrainEnergy("SPRINT_JUMP")
+  // ---------- Combat cadence (24 fps artifact -> 60 Hz port) ----------
+  // The artifact simulates at 24 logic fps; this port runs 1 tick per 60 Hz
+  // step, so every animation-driven combat timing scales by 60/24 = 2.5 to
+  // keep the original's real-time cadence (punches per second, stun windows,
+  // recovery). Without this, the fight plays 2.5x faster than the original.
+  var ANIM_TICKS_TO_STEPS = FPS / 24; // 2.5
+
   var COMBO_LINKS = 3; // PunchComboNr cap
   // Passive HP regen (extracted PlayerState): after HP_DAMAGE_REGEN_DELAY steps
   // without taking damage, HP recovers 0.1 per step (0.1 * game_speed).
   var HP_REGEN_RATE = 0.1 * VEL_SCALE;
   var HP_DAMAGE_REGEN_DELAY = 24 * 3 * TICKS_TO_STEPS; // 24 * 3 ticks -> 72 steps
-  var COMBO_HIT_FRAME = [4, 5, 6]; // HitPunchComboFrame per link (frame where the punch connects)
-  var COMBO_MIN_FRAME = [6, 7, 8]; // MinPunchComboFrame per link (earliest frame to chain the next)
-  var COMBO_STUN_BASE = [3, 4, 5]; // HitPunchStunTime base + 5 * random
-  var TRADE_STUN = 2; // MeleeStrike trade loser eats a 2-frame stun
+  var COMBO_HIT_FRAME = [4, 5, 6].map(function (f) { return Math.round(f * ANIM_TICKS_TO_STEPS); }); // HitPunchComboFrame
+  var COMBO_MIN_FRAME = [6, 7, 8].map(function (f) { return Math.round(f * ANIM_TICKS_TO_STEPS); }); // MinPunchComboFrame
+  var COMBO_STUN_BASE = [3, 4, 5].map(function (f) { return Math.round(f * ANIM_TICKS_TO_STEPS); }); // + COMBO_STUN_RAND * random at the hit site
+  var COMBO_STUN_RAND = Math.round(5 * ANIM_TICKS_TO_STEPS); // scaled 5-tick random window
+  var TRADE_STUN = Math.round(2 * ANIM_TICKS_TO_STEPS); // trade loser stun
   var PUNCH_GLIDE_SPEED = 2; // combo 3 lunge (decays with progress)
   var KICK_DAMAGE = 4; // KickDamage (== JumpKickDamage)
   // Knockback velocities use the extracted per-tick values directly.
@@ -375,9 +383,9 @@
   var PLAYER_WIDTH = 28;
   var PLAYER_HEIGHT = 44;
   var PLAYER_SIZE_SCALE = 0.6; // the user-requested 40% smaller fighter body
-  var PUNCH_ANIM_FRAMES = 18; // animation length of each combo link
+  var PUNCH_ANIM_FRAMES = Math.round(12 * ANIM_TICKS_TO_STEPS); // PUNCH anim ≈ 12 artifact frames per link
   var PUNCH_RANGE = 16;
-  var KICK_COOLDOWN = 24;
+  var KICK_COOLDOWN = Math.round(24 * ANIM_TICKS_TO_STEPS); // extracted 24 ticks
   var KICK_RANGE = 20;
   var ROLL_ANIM_FRAMES = 16; // roll duration in frames
   var LYING_ANIM_FRAMES = 30; // knocked-down recovery length
@@ -1122,7 +1130,7 @@
       other.falling = true;
     } else {
       // Grounded victim: stun on links 1 and 2 (combo 3 launches below)
-      other.stunTimer = COMBO_STUN_BASE[this.punchComboNr - 1] + 5 * Math.random();
+      other.stunTimer = COMBO_STUN_BASE[this.punchComboNr - 1] + COMBO_STUN_RAND * Math.random();
     }
     // Damage only applies to a live victim (HP -= damage gated on HP > 0)
     if (other.hp > 0) {
