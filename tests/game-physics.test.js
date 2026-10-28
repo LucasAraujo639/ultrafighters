@@ -993,3 +993,27 @@ test('a dead fighter never regenerates back to life', () => {
   assert.ok(game.roundOver !== null, 'the kill still registers');
   assert.equal(player.hp, 0, 'no passive revive from 0 HP');
 });
+
+test('a fighter lying on the ground cannot be beaten down further', () => {
+  const { game } = createGame();
+  const [attacker, victim] = game.players;
+  const floor = { x: 0, y: 500, w: 800, h: 100, solidSides: true, cloud: false, ladder: false };
+  game.platforms.length = 0;
+  game.platforms.push(floor);
+
+  resetPlayer(attacker, 300, floor.y - attacker.h, true);
+  attacker.groundedPlatform = floor;
+  resetPlayer(victim, 306, floor.y - victim.h, true);
+  victim.groundedPlatform = floor;
+  victim.knockedDown = true; // lying body
+  victim.knockedDownFrame = 15;
+  const hpBefore = victim.hp;
+
+  attacker.lastDirX = 1;
+  attacker.punchComboNr = 3;
+  attacker.tryPunchHit(victim);
+  attacker.tryKickHit(victim);
+
+  assert.equal(victim.hp, hpBefore, 'no damage lands on a lying body');
+  assert.equal(victim.falling, false, 'the body is not juggled while lying');
+});

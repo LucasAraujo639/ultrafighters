@@ -1159,6 +1159,7 @@
   Player.prototype.tryPunchHit = function (other) {
     if (!other) return;
     if (other.rolling) return; // rolling dodges melee
+    if (other.knockedDown && other.onGround) return; // no beat-down on a lying body
     if (!this.meleeConnects(other)) return;
     if (this.punchTradeWith(other)) {
       // The swing is spent either way; the coin flip picks the winner
@@ -1550,6 +1551,7 @@
     };
     if (!rectsOverlap(hitBox, other.getBounds())) return;
     if (other.rolling) return; // rolling dodges melee
+    if (other.knockedDown && other.onGround) return; // no beat-down on a lying body
     // BeingKicked: aimed weapons drop; victim faces the kicker, then 50% knockdown
     if (other.aiming) other.abortAiming(true);
     other.lastDirX = -this.lastDirX;
@@ -2762,6 +2764,21 @@
       px(W - 4, torsoTop + torsoH - 2, KICK_RANGE, 5, c.pants);
       px(W - 4 + KICK_RANGE, torsoTop + torsoH - 3, 6, 6, c.shoes);
     }
+  }
+
+  // Health bar above the head (PlayerBars-style): only shown while damaged,
+  // with the classic green -> yellow -> red thresholds
+  function drawHealthBar(p) {
+    if (p.hp >= 100 || p.hp <= 0) return;
+    var barW = 24;
+    var barH = 3;
+    var x = p.x + p.w / 2 - barW / 2;
+    var y = p.y - 7;
+    ctx.fillStyle = 'rgba(10,12,16,0.75)';
+    ctx.fillRect(x - 1, y - 1, barW + 2, barH + 2);
+    var fill = (p.hp / 100) * barW;
+    ctx.fillStyle = p.hp > 50 ? '#3ecf5a' : p.hp > 25 ? '#e8c34a' : '#d0453a';
+    ctx.fillRect(x, y, fill, barH);
   }
 
   function drawPlayer(p) {
@@ -4016,6 +4033,8 @@
     drawExplosions();
     drawPlayer(player1);
     drawPlayer(player2);
+    drawHealthBar(player1);
+    drawHealthBar(player2);
     // Far-right wall entrances (extracted Police Station) — drawn on top so the
     // player disappears as they enter the black door
     drawPortalEntrance(doorPortals[0], true);
