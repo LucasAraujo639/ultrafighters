@@ -1065,3 +1065,74 @@ test('MELEE over a lying body does not grab it', () => {
   assert.equal(p2.grabbedBy, null, 'the lying body is never held');
   assert.equal(p2.knockedDown, true, 'the body stays lying where it was');
 });
+
+test('crates are physical: standable, pushable, kickable, breakable', () => {
+  const { game, listeners } = createGame();
+  const player = game.players[0];
+  const floor = { x: 0, y: 500, w: 800, h: 100, solidSides: true, cloud: false, ladder: false };
+  game.platforms.length = 0;
+  game.platforms.push(floor);
+  game.crates.length = 0;
+
+  // a crate drops onto the floor from above
+  game.crates.push({ x: 400, y: 400, w: 14, h: 14, vx: 0, vy: 0, hp: 40, hp0: 40, angle: 0, spin: 0, resting: false, dead: false });
+  for (let frame = 0; frame < 40; frame++) game.step();
+  const crate = game.crates[0];
+  assert.ok(Math.abs(crate.y + crate.h - floor.y) < 1e-6, 'the crate rests on the floor');
+
+  // the player lands on top of the crate
+  resetPlayer(player, 402, 300, false);
+  player.airVelocityY = 0;
+  let standing = false;
+  for (let frame = 0; frame < 60 && !standing; frame++) {
+    game.step();
+    standing = player.onGround && player.groundedCrate === crate;
+  }
+  assert.equal(standing, true, 'the player stands on the crate');
+
+  // walking into a crate pushes it
+  resetPlayer(player, 200, floor.y - player.h, true);
+  player.groundedPlatform = floor;
+  player.groundedCrate = null;
+  game.crates.length = 0;
+  game.crates.push({ x: 250, y: floor.y - 14, w: 14, h: 14, vx: 0, vy: 0, hp: 40, hp0: 40, angle: 0, spin: 0, resting: true, dead: false });
+  keyDown(listeners, 'KeyD');
+  for (let frame = 0; frame < 20; frame++) game.step();
+  assert.ok(game.crates[0].x > 250, 'the walk pushes the crate to the right');
+
+  // a kick damages it, repeated hits break it into debris
+  const target = game.crates[0];
+  target.hp = 4; // one kick (4) breaks it
+  player.x = target.x - 20;
+  keyUp(listeners, 'KeyD');
+  keyDown(listeners, 'KeyG');
+  for (let frame = 0; frame < 10; frame++) game.step();
+  assert.ok(game.crates.indexOf(target) === -1 || target.dead, 'the broken crate is gone');
+  assert.ok(game.glassShards.length > 0, 'the crate throws wood debris');
+});
+
+test('grenade blasts damage crates and send them flying', () => {
+  const { game } = createGame();
+  const floor = { x: 0, y: 500, w: 800, h: 100, solidSides: true, cloud: false, ladder: false };
+  game.platforms.length = 0;
+  game.platforms.push(floor);
+  game.crates.length = 0;
+  game.crates.push({ x: 400, y: 486, w: 14, h: 14, vx: 0, vy: 0, hp: 40, hp0: 40, angle: 0, spin: 0, resting: true, dead: false });
+  game.explodeGrenade(392, 490);
+  const crate = game.crates[0];
+  assert.ok(crate.hp < 40, 'the blast damages the crate');
+  assert.ok(Math.abs(crate.vx) > 3, 'the blast throws the crate');
+});
+
+test('bullets damage crates and stop inside them', () => {
+  const { game } = createGame();
+  const floor = { x: 0, y: 500, w: 800, h: 100, solidSides: true, cloud: false, ladder: false };
+  game.platforms.length = 0;
+  game.platforms.push(floor);
+  game.crates.length = 0;
+  game.crates.push({ x: 400, y: 486, w: 14, h: 14, vx: 0, vy: 0, hp: 40, hp0: 40, angle: 0, spin: 0, resting: true, dead: false });
+  game.bullets.push({ x: 405, y: 492, vx: 5, vy: 0, damage: 20, crit: false, owner: 1 });
+  game.step();
+  assert.ok(game.crates[0].hp === 20, 'the crate took the bullet damage');
+  assert.equal(game.bullets.length, 0, 'the crate ate the bullet');
+});

@@ -326,6 +326,15 @@
   };
   // Health pickups (extracted WeaponPowerupData): Ammo IS the heal amount,
   // applied as HP += Ammo on pickup (clamped at 100 by the HP setter)
+  // CRATE props (extracted AddBox "CRATE"): 14x14, BodyData hp 40, dynamic
+  // (gravity), Kickable KickPower 1.7, PlayerFragile, AffectedByExplosions,
+  // breaks into 3 debris pieces.
+  var CRATE_SIZE = 14;
+  var CRATE_HP = 40;
+  var CRATE_GRAVITY = PLAYER_GRAVITY;
+  var CRATE_FRICTION = 0.85;
+  var CRATE_BOUNCE = 0.35;
+  var CRATE_KICK_POWER = 1.7;
   var HEALTH_PILLS = { kind: 'health', name: 'Pills', ammo: 25, shape: 'pills' };
   var HEALTH_MEDKIT = { kind: 'health', name: 'Medkit', ammo: 50, shape: 'medkit' };
   // AbortAiming drop velocities (extracted): forced [hit while aiming], empty [toss]
@@ -427,6 +436,138 @@
     { weapon: GUNS.pistol, x: 320, y: 522, taken: false },
     { weapon: GRENADE, x: 620, y: 484, taken: false }
   ];
+
+  // Dynamic crates (extracted CRATE props; pushable, kickable, standable)
+  var crates = [];
+  function createCrate(x, yBottom) {
+    crates.push({
+      x: x, y: yBottom - CRATE_SIZE, w: CRATE_SIZE, h: CRATE_SIZE,
+      vx: 0, vy: 0, hp: CRATE_HP, angle: 0, spin: 0,
+      resting: true, hp0: CRATE_HP
+    });
+  }
+  var crateSpawns = [
+    [44, 459], [60, 459], [52, 443], // stacked stack by the fence
+    [330, 459], // by the right side of the outdoor floor
+    [300, 352], // on the upper cloud shelf
+    [470, 339], [486, 339], // first floor, left of the jail window
+    [500, 339], [516, 339], // central platform
+    [760, 261], // second floor
+    [520, 249] // on the long upper ledge
+  ];
+  for (var _cs = 0; _cs < crateSpawns.length; _cs++) createCrate(crateSpawns[_cs][0], crateSpawns[_cs][1]);
+
+  function updateCrates() {
+    for (var i = crates.length - 1; i >= 0; i--) {
+      var c = crates[i];
+      if (c.dead) { crates.splice(i, 1); continue; }
+      c.vy += CRATE_GRAVITY;
+      var speed = Math.max(Math.abs(c.vx), Math.abs(c.vy));
+      var steps = Math.max(1, Math.ceil(speed / 6));
+      var grounded = false;
+      for (var st = 0; st < steps; st++) {
+        var prevBottom = c.y + c.h;
+        c.x += c.vx / steps;
+        c.y += c.vy / steps;
+        // platform landings + solid sides
+        for (var pi = 0; pi < platforms.length; pi++) {
+          var plat = platforms[pi];
+          if (plat.ladder || plat.cloud || plat.oneWay) continue;
+          var overlapX = c.x < plat.x + plat.w && c.x + c.w > plat.x;
+          if (!overlapX) continue;
+          var top = platformBoundaryForSpan(plat, c.x, c.x + c.w, false);
+          if (c.vy >= 0 && top !== null && prevBottom <= top + 1e-7 && c.y + c.h >= top - 1e-7) {
+            c.y = top - c.h;
+            if (c.vy > 1.2) { c.vy = -c.vy * CRATE_BOUNCE; c.spin *= 0.5; }
+            else c.vy = 0;
+            c.vx *= 0.8;
+            if (Math.abs(c.vx) < 0.05) c.vx = 0;
+            grounded = true;
+            continue;
+          }
+          // solid side push-out (crate flew into a wall)
+          if (!plat.solidSides) continue;
+          var prevInsideX = prevBottom - c.h < plat.x + plat.w && prevBottom - c.h + c.w > plat.x;
+          var insideY = c.y < plat.y + plat.h && c.y + c.h > plat.y;
+          if (prevInsideX && insideY) continue; // spawned overlapping; let vertical resolve
+          if (insideY && top !== null && c.y + c.h > top + 1) {
+            if (c.vx > 0 && c.x + c.w > plat.x && c.x < plat.x) { c.x = plat.x - c.w; c.vx = -c.vx * 0.4; }
+            else if (c.vx < 0 && c.x < plat.x + plat.w && c.x + c.w > plat.x + plat.w) { c.x = plat.x + plat.w; c.vx = -c.vx * 0.4; }
+          }
+        }
+        // crate-on-crate stacking (simple)
+        for (var oi = 0; oi < crates.length; oi++) {
+          var o = crates[oi];
+          if (o === c || o.dead) continue;
+          var ox = c.x < o.x + o.w && c.x + c.w > o.x;
+          if (!ox) continue;
+          var oTop = o.y;
+          var prevCBottom = prevBottom;
+          if (c.vy >= 0 && prevCBottom <= oTop + 1e-7 && c.y + c.h >= oTop - 1e-7) {
+            c.y = oTop - c.h;
+            c.vy = 0;
+            c.vx *= 0.8;
+            grounded = true;
+            o.vx += c.vx * 0.25; // weight transfer
+          }
+        }
+      }
+      // resting friction + settle rotation
+      if (grounded) {
+        c.vx *= CRATE_FRICTION;
+        if (Math.abs(c.vx) < 0.05) c.vx = 0;
+        c.spin *= 0.8;
+        if (Math.abs(c.spin) < 0.01) c.spin = 0;
+        if (c.vy === 0) {
+          c.resting = true;
+          c.angle *= 0.6;
+          if (Math.abs(c.angle) < 0.02) c.angle = 0;
+        }
+      } else {
+        c.resting = false;
+        if (c.vy !== 0) c.angle += c.spin;
+      }
+    }
+  }
+
+  function breakCrate(c) {
+    if (c.dead) return;
+    c.dead = true;
+    // 3 debris pieces (extracted onDestruction spawns crate_debris_01..03)
+    var debris = [[-3, -5], [4, -1], [-1, 5]];
+    for (var d = 0; d < debris.length; d++) {
+      glassShards.push({
+        x: c.x + c.w / 2 + debris[d][0], y: c.y + c.h / 2 + debris[d][1],
+        vx: c.vx + Math.random() * 4 - 2, vy: c.vy - Math.random() * 3,
+        angle: Math.random() * Math.PI, spin: Math.random() * 0.3 - 0.15,
+        size: 6 + Math.random() * 4, life: 30, color: '#8a6a41'
+      });
+    }
+  }
+
+  function damageCrate(c, amount, pushX, pushY) {
+    if (c.dead) return;
+    c.hp -= amount;
+    c.vx += pushX; c.vy += pushY;
+    c.spin += (pushX >= 0 ? 1 : -1) * 0.25;
+    c.resting = false;
+    if (c.hp <= 0) breakCrate(c);
+  }
+
+  function hitCratesInReach(attacker, reach, damage, kickPower) {
+    var dir = attacker.lastDirX;
+    var hitBox = {
+      x: dir > 0 ? attacker.x + attacker.w : attacker.x - reach,
+      y: attacker.y,
+      w: reach, h: attacker.h
+    };
+    for (var i = 0; i < crates.length; i++) {
+      var c = crates[i];
+      if (c.dead) continue;
+      if (!rectsOverlap(hitBox, c)) continue;
+      damageCrate(c, damage, dir * kickPower, -2.5);
+    }
+  }
 
   // Phase 5 entities
   var bullets = []; // { x, y, vx, vy, damage, crit, owner, trail[] }
@@ -1902,6 +2043,7 @@
           this.kickFlash = 8;
           this.tryKickHit(other);
           this.breakGlassInReach(true);
+          hitCratesInReach(this, KICK_RANGE * PLAYER_SIZE_SCALE, KICK_DAMAGE, 6 * CRATE_KICK_POWER);
         }
       } else if (this.jumping) {
         // JumpKick: queued from the air, executes once AirbornTimer >= 2.5
@@ -1919,6 +2061,7 @@
       this.kickFlash = 8;
       this.tryKickHit(other);
       this.breakGlassInReach(true);
+      hitCratesInReach(this, KICK_RANGE * PLAYER_SIZE_SCALE, KICK_DAMAGE, 6 * CRATE_KICK_POWER);
     }
 
     // ---------- Punch animation progression ----------
@@ -1940,6 +2083,7 @@
         this.punchHitPerformed = true;
         this.tryPunchHit(other);
         this.breakGlassInReach(false);
+        hitCratesInReach(this, this.equipped.range[this.punchComboNr - 1] * PLAYER_SIZE_SCALE, this.equipped.damage[this.punchComboNr - 1], 3);
       }
       if (this.punchFrame >= PUNCH_ANIM_FRAMES) {
         if (this.punchQueued) {
@@ -2071,6 +2215,7 @@
     var groundedThisFrame = false;
     var landVy = 0;
     var groundedPlatformThisFrame = null;
+    var groundedCrateThisFrame = null;
 
     for (var s = 0; s < steps; s++) {
       // Horizontal substep + resolution. If already within a platform's x span,
@@ -2168,6 +2313,39 @@
         }
       }
 
+      // Dynamic crates: land on top when airborne...
+      if (!groundedThisFrame && !this.climbing) {
+        for (var ci = 0; ci < crates.length; ci++) {
+          var crate = crates[ci];
+          if (crate.dead) continue;
+          if (!(this.x < crate.x + crate.w && this.x + this.w > crate.x)) continue;
+          var cPrevFeet = subY0 + this.h;
+          var cCurFeet = this.y + this.h;
+          if (c > 0 && cPrevFeet <= crate.y + 1e-7 && cCurFeet >= crate.y - 1e-7) {
+            this.y = crate.y - this.h;
+            groundedThisFrame = true;
+            groundedCrateThisFrame = crate;
+            landVy = c;
+            this.airVelocityY = 0;
+            c = 0;
+            break;
+          }
+        }
+      }
+      // ...and get pushed when walking into one (grounded walkers land every
+      // frame, so the push check must run regardless of groundedThisFrame)
+      for (var ci2 = 0; ci2 < crates.length; ci2++) {
+        var crate2 = crates[ci2];
+        if (crate2.dead) continue;
+        var bodyOver = this.x < crate2.x + crate2.w && this.x + this.w > crate2.x &&
+          this.y < crate2.y + crate2.h && this.y + this.h > crate2.y;
+        if (!bodyOver) continue;
+        if (this.y + this.h > crate2.y + 2 && h !== 0) {
+          crate2.vx = h * 0.9;
+          crate2.resting = false;
+        }
+      }
+
       // Dive tackle: checked per substep while diving (extracted flow)
       if (this.diving) this.checkDiveImpact(other);
 
@@ -2188,6 +2366,7 @@
     if (groundedThisFrame) {
       this.onGround = true;
       this.groundedPlatform = groundedPlatformThisFrame;
+      this.groundedCrate = groundedCrateThisFrame;
       if (this.diving) {
         // Diving landing (extracted): DropGrabbedPlayer() FIRST, then Roll() -
         // the catch is momentary (it only lasts the dive flight) and the dive
@@ -2266,6 +2445,22 @@
           if (gap <= allowedGap && gap < supportGap) {
             support = plat;
             supportGap = gap;
+          }
+        }
+        // crates are ground support too: standing on a pushed crate rides it
+        var feetY2 = this.y + this.h;
+        for (var sci = 0; sci < crates.length; sci++) {
+          var sc = crates[sci];
+          if (sc.dead) continue;
+          if (this.x < sc.x + sc.w && this.x + this.w > sc.x &&
+              feetY2 >= sc.y - GROUND_SUPPORT_TOLERANCE && feetY2 <= sc.y + GROUND_SUPPORT_TOLERANCE) {
+            this.y = sc.y - this.h;
+            this.x += sc.vx * 0.6; // ride along
+            this.onGround = true;
+            this.groundedPlatform = null;
+            this.groundedCrate = sc;
+            support = sc;
+            break;
           }
         }
         this.onGround = support !== null;
@@ -2569,6 +2764,41 @@
     }
   }
 
+  function hexToRgb(hex) {
+    var n = parseInt(hex.slice(1), 16);
+    return ((n >> 16) & 255) + ',' + ((n >> 8) & 255) + ',' + (n & 255);
+  }
+
+  function drawCrates() {
+    for (var i = 0; i < crates.length; i++) {
+      var c = crates[i];
+      if (c.dead) continue;
+      ctx.save();
+      ctx.translate(c.x + c.w / 2, c.y + c.h / 2);
+      ctx.rotate(c.angle);
+      var half = c.w / 2;
+      px(-half, -half, c.w, c.h, WOOD.base);
+      px(-half, -half, c.w, 2, WOOD.light);
+      px(-half, half - 2, c.w, 2, WOOD.dark);
+      px(-half, -half, 2, c.h, WOOD.light);
+      px(half - 2, -half, 2, c.h, WOOD.dark);
+      ctx.strokeStyle = WOOD.light;
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(-half + 2, -half + 2); ctx.lineTo(half - 2, half - 2);
+      ctx.moveTo(half - 2, -half + 2); ctx.lineTo(-half + 2, half - 2);
+      ctx.stroke();
+      // damage cracks
+      if (c.hp < c.hp0 * 0.6) {
+        ctx.strokeStyle = '#3a2c16';
+        ctx.beginPath();
+        ctx.moveTo(-half + 3, 0); ctx.lineTo(0, 3); ctx.lineTo(half - 4, -2);
+        ctx.stroke();
+      }
+      ctx.restore();
+    }
+  }
+
   function drawGlassShards() {
     for (var i = 0; i < glassShards.length; i++) {
       var s = glassShards[i];
@@ -2576,7 +2806,9 @@
       ctx.save();
       ctx.translate(s.x, s.y);
       ctx.rotate(s.angle);
-      ctx.fillStyle = 'rgba(205,245,255,' + alpha + ')';
+      var base = s.color || '205,245,255';
+      var rgb = base[0] === '#' ? hexToRgb(base) : base;
+      ctx.fillStyle = 'rgba(' + rgb + ',' + alpha + ')';
       ctx.beginPath();
       ctx.moveTo(-s.size / 2, -1);
       ctx.lineTo(s.size / 2, -0.5);
@@ -3135,6 +3367,16 @@
           }
         }
         if (dead) break;
+        for (var bci = 0; bci < crates.length; bci++) {
+          var bcrate = crates[bci];
+          if (bcrate.dead) continue;
+          if (b.x > bcrate.x && b.x < bcrate.x + bcrate.w && b.y > bcrate.y && b.y < bcrate.y + bcrate.h) {
+            damageCrate(bcrate, b.damage, 0, 0);
+            dead = true; // the crate eats the bullet
+            break;
+          }
+        }
+        if (dead) break;
         var targets = [player1, player2];
         for (var t = 0; t < targets.length; t++) {
           var p = targets[t];
@@ -3163,6 +3405,17 @@
   function explodeGrenade(x, y) {
     explosions.push({ x: x, y: y, radius: GRENADE.radius, frame: 0 });
     breakGlassInRadius(x, y, GRENADE.radius); // AffectedByExplosions
+    // AffectedByExplosions: crates take blast damage and fly with it
+    for (var ci = 0; ci < crates.length; ci++) {
+      var c = crates[ci];
+      if (c.dead) continue;
+      var cdx = c.x + c.w / 2 - x;
+      var cdy = c.y + c.h / 2 - y;
+      var cdist = Math.sqrt(cdx * cdx + cdy * cdy);
+      if (cdist > GRENADE.radius) continue;
+      var cfalloff = 1 - cdist / GRENADE.radius;
+      damageCrate(c, GRENADE.damageMax * cfalloff, (cdx >= 0 ? 1 : -1) * 7 * cfalloff, -5 * cfalloff);
+    }
     var targets = [player1, player2];
     for (var t = 0; t < targets.length; t++) {
       var p = targets[t];
@@ -3926,6 +4179,7 @@
     updateExplosions();
     updateGlassShards();
     updateWeaponItems();
+    updateCrates();
 
     // The pit (OutsideTheWorld): out of the map -> respawn at a level spawn
     if (player1.y > 640) respawnAtSpawnPoint(player1);
@@ -4196,11 +4450,9 @@
       drawWindmill(168, 459);
       drawSignPost(19, 386);
       // props on the outdoor floor
-      drawCrate(40, 459); drawCrate(56, 459); drawCrate(48, 443);
       drawBarrel(96, 459);
-      drawCrate(330, 459); drawBarrel(348, 459);
+      drawBarrel(348, 459);
       drawBarrel(104, 396); // on the low cloud shelf
-      drawCrate(300, 352, 13); // on the upper cloud shelf
     }
     // ---- station side ----
     // ground floor: windows + red slats + pipe
@@ -4215,17 +4467,14 @@
       drawJailWindow(470, 356, 56, 48);
       drawJailWindow(560, 356, 56, 48);
       drawShelfUnit(655, 339, 55, 76);
-      drawCrate(470, 339); drawCrate(486, 339);
       drawPipe(735, 345, 5, 60);
     }
     // second floor
     if (vis(450, 300)) {
       drawJailWindow(470, 266, 56, 48);
       drawJailWindow(640, 266, 60, 48);
-      drawCrate(760, 261); drawBarrel(740, 261);
+      drawBarrel(740, 261);
     }
-    // top ledge props
-    if (vis(450, 300)) drawCrate(520, 249, 13);
     drawConcreteSteps(560, 512);
   }
 
@@ -4355,6 +4604,7 @@
     drawBullets();
     drawGrenades();
     drawExplosions();
+    drawCrates();
     drawPlayer(player1);
     drawPlayer(player2);
     drawHealthBar(player1);
@@ -4383,6 +4633,7 @@
   window.__sf = {
     players: [player1, player2],
     platforms: platforms,
+    crates: crates,
     glassPanes: glassPanes,
     glassShards: glassShards,
     doorPortals: doorPortals,
@@ -4399,6 +4650,7 @@
     get botActive() { return botActive; },
     set botActive(v) { botActive = v; },
     restartRound: restartRound,
+    explodeGrenade: explodeGrenade,
     step: updateStep,
     render: render
   };
