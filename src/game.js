@@ -271,17 +271,17 @@
   var ENERGY_COST_JUMP = 5; // DrainEnergy("JUMP")
   var ENERGY_COST_SPRINT_JUMP = 12; // DrainEnergy("SPRINT_JUMP")
   var COMBO_LINKS = 3; // PunchComboNr cap
-  var COMBO_HIT_FRAME = [4, 5, 6]; // HitPunchComboFrame per link (the hit lands here)
-  var COMBO_MIN_FRAME = [6, 7, 8]; // MinPunchComboFrame per link (chain gate)
+  var COMBO_HIT_FRAME = [4, 5, 6]; // HitPunchComboFrame per link (frame where the punch connects)
+  var COMBO_MIN_FRAME = [6, 7, 8]; // MinPunchComboFrame per link (earliest frame to chain the next)
   var COMBO_STUN_BASE = [3, 4, 5]; // HitPunchStunTime base + 5 * random
+  var TRADE_STUN = 2; // MeleeStrike trade loser eats a 2-frame stun
   var PUNCH_GLIDE_SPEED = 2; // combo 3 lunge (decays with progress)
-  var KICK_DAMAGE = 4; // KickDamage
-  var JUMPKICK_DAMAGE = 4; // JumpKickDamage
+  var KICK_DAMAGE = 4; // KickDamage (== JumpKickDamage)
   // Knockback velocities use the extracted per-tick values directly.
   var KICK_KNOCKBACK_X = 4 * VEL_SCALE; // BeingKicked: AirVelocityX = 4 * dir
   var KICK_KNOCKBACK_Y = -2 * VEL_SCALE; // BeingKicked: AirVelocityY = -2
   var PUNCH_AERIAL_KNOCKBACK = 2 * VEL_SCALE; // PunchPlayer: AirVelocityX += 2 * dir
-  // Combo finisher / lethal launch knockback (extracted: 3 / -2.5)
+  // Combo finisher knockback (extracted 3 / -2.5)
   var COMBO_KNOCKBACK_X = 3 * VEL_SCALE;
   var COMBO_KNOCKBACK_Y = -2.5 * VEL_SCALE;
   var STAGGER_SPEED = 1 * VEL_SCALE; // PlayerState.StaggerSpeed
@@ -369,7 +369,7 @@
   var PLAYER_SIZE_SCALE = 0.6; // the user-requested 40% smaller fighter body
   var PUNCH_ANIM_FRAMES = 18; // animation length of each combo link
   var PUNCH_RANGE = 16;
-  var KICK_COOLDOWN = 8; // Kicking setter: KickingCooldown = 8 (only on connect)
+  var KICK_COOLDOWN = 24;
   var KICK_RANGE = 20;
   var ROLL_ANIM_FRAMES = 16; // roll duration in frames
   var LYING_ANIM_FRAMES = 30; // knocked-down recovery length
@@ -1059,92 +1059,99 @@
     if (this.sprintEnergy <= 0) this.sprinting = false;
   };
 
-  Player.prototype.punchReady = function () {
-    // PunchReady (extracted): can start/continue a punch exchange
-    return !this.punching && this.stunTimer <= 0 && this.onGround &&
-      this.hp > 0 && !this.falling && !this.knockedDown && !this.rolling && !this.diving;
-  };
-
-  Player.prototype.meleeHitBox = function () {
+  Player.prototype.meleeConnects = function (other) {
     // Range is authored for the base body; the body is drawn at
     // PLAYER_SIZE_SCALE, so the box scales too (no invisible extra reach).
     var reach = this.equipped.range[this.punchComboNr - 1] * PLAYER_SIZE_SCALE;
-    return {
+    var hitBox = {
       x: this.lastDirX > 0 ? this.x + this.w : this.x - reach,
       y: this.y + 8 * PLAYER_SIZE_SCALE,
       w: reach,
       h: 20 * PLAYER_SIZE_SCALE
     };
+    return rectsOverlap(hitBox, other.getBounds());
   };
 
-  Player.prototype.tryPunchHit = function (other) {
-    var hitBox = this.meleeHitBox();
-    if (!rectsOverlap(hitBox, other.getBounds())) return;
-    if (other.rolling) return; // rolling dodges melee
+  // MeleeStrike trade (extracted): when BOTH fighters connect on the same
+  // frame, only the higher PlayerNr side resolves it — a coin flip decides
+  // who lands the punch; the loser eats a 2-frame stun instead.
+  Player.prototype.punchTradeWith = function (other) {
+    if (!other || other.hp <= 0) return false;
+    if (other.id <= this.id) return false; // only the higher number resolves
+    if (!other.punching || other.punchHitPerformed) return false;
+    if (other.punchFrame + 1 < COMBO_HIT_FRAME[other.punchComboNr - 1]) return false;
+    if (!this.meleeConnects(other)) return false;
+    var theirReach = other.equipped.range[other.punchComboNr - 1] * PLAYER_SIZE_SCALE;
+    var theirBox = {
+      x: other.lastDirX > 0 ? other.x + other.w : other.x - theirReach,
+      y: other.y + 8 * PLAYER_SIZE_SCALE,
+      w: theirReach,
+      h: 20 * PLAYER_SIZE_SCALE
+    };
+    return rectsOverlap(theirBox, this.getBounds());
+  };
 
-    // MeleeStrike mutual exchange (extracted): a higher-index victim that is
-    // also punch-ready and has me in ITS punch range forces a coin flip -
-    // 50% I eat a 2-step stun and the strike is swallowed, 50% the hit lands
-    // (and the victim's own counter-punch resolves in its update).
-    if (other.id > this.id && other.punchReady()) {
-      var theirBox = {
-        x: other.lastDirX > 0 ? other.x + other.w : other.x - other.equipped.range[other.punchComboNr - 1] * PLAYER_SIZE_SCALE,
-        y: other.y + 8 * PLAYER_SIZE_SCALE,
-        w: other.equipped.range[other.punchComboNr - 1] * PLAYER_SIZE_SCALE,
-        h: 20 * PLAYER_SIZE_SCALE
-      };
-      if (rectsOverlap(theirBox, this.getBounds())) {
-        if (Math.random() >= 0.5) {
-          this.stunTimer = 2;
-          return;
-        }
-      }
-    }
-
+  // PunchPlayer (extracted): damage, stun, and the three launch cases
+  Player.prototype.applyPunch = function (other) {
+    var wasDead = other.hp <= 0;
     // PunchPlayer: victim faces the attacker; aimed weapons drop (CheckAimDrop)
     if (other.aiming) other.abortAiming(true);
     other.lastDirX = -this.lastDirX;
-    if (other.jumping || !other.onGround) {
-      // Aerial victim: AirVelocityX += 2 * dir, then Fall()
+    if (other.jumping) {
+      // Jumping victim: AirVelocityX += 2 * attacker dir, then Fall()
       other.airVelocityX += PUNCH_AERIAL_KNOCKBACK * this.lastDirX;
       other.falling = true;
     } else {
       // Grounded victim: stun on links 1 and 2 (combo 3 launches below)
       other.stunTimer = COMBO_STUN_BASE[this.punchComboNr - 1] + 5 * Math.random();
     }
-    other.hp -= this.equipped.damage[this.punchComboNr - 1]; // fists 6/7/8, weapons more
-    other.hitFlash = 6;
+    // Damage only applies to a live victim (HP -= damage gated on HP > 0)
+    if (other.hp > 0) {
+      other.hp -= this.equipped.damage[this.punchComboNr - 1]; // fists 6/7/8
+      other.hitFlash = 6;
+    }
 
-    // PunchPlayer death cascade (extracted):
-    // (a) the victim DIED while running/sprinting: it flies in ITS OWN
-    //     facing direction (3 / -2.5) - a momentum death;
-    var diedRunning =
-      other.hp <= 0 && (other.running || other.sprinting);
-    if (diedRunning) {
+    // Launch case 1: a lethal punch on a RUNNING/SPRINTING victim sends them
+    // flying in THEIR OWN facing direction (dead man's momentum)
+    if (other.hp <= 0 && !wasDead && (other.running || other.sprinting)) {
       other.airVelocityX = other.lastDirX * 3;
       other.airVelocityY = -2.5;
       other.falling = true;
-    }
-    // (b) combo-3 finisher or any lethal punch: flies in the ATTACKER's
-    //     direction (3 / -2.5) into a ragdoll Fall();
-    else if (this.punchComboNr === COMBO_LINKS || other.hp <= 0) {
+    } else if (this.punchComboNr === COMBO_LINKS || other.hp <= 0) {
+      // Launch case 2: completed 3-hit combo (or a lethal punch) launches the
+      // victim: AirVelocityX = 3 * attacker dir, AirVelocityY = -2.5, Fall().
+      // The ragdoll lands into Knockdowned (lying) and gets up after recovery.
       other.airVelocityX = COMBO_KNOCKBACK_X * this.lastDirX;
       other.airVelocityY = COMBO_KNOCKBACK_Y;
+      other.falling = true;
+    }
+    // Launch case 3: any lethal punch on a standing victim also tips them over
+    if (other.hp <= 0 && !other.knockedDown && !this.falling) {
+      other.airVelocityX = this.lastDirX * 2;
+      other.airVelocityY = -2.5;
+      other.falling = true;
+    }
+    if (other.falling) {
       other.onGround = false;
       other.groundedPlatform = null;
       other.jumping = false;
       other.knockedDown = false;
       other.knockedDownFrame = 0;
       other.stunTimer = 0;
-      other.falling = true;
     }
-    // (c) catch-all lethal (victim not knockdowned, attacker not falling):
-    //     weaker toss (2 / -2.5).
-    if (other.hp <= 0 && !other.knockedDown && !other.falling && !this.falling) {
-      other.airVelocityX = COMBO_KNOCKBACK_X * 2 / 3 * this.lastDirX; // 2 = 3 * (2/3): keep the constant sourced
-      other.airVelocityY = -2.5;
-      other.falling = true;
+  };
+
+  Player.prototype.tryPunchHit = function (other) {
+    if (!other) return;
+    if (other.rolling) return; // rolling dodges melee
+    if (!this.meleeConnects(other)) return;
+    if (this.punchTradeWith(other)) {
+      // The swing is spent either way; the coin flip picks the winner
+      if (Math.random() < 0.5) this.applyPunch(other);
+      else this.stunTimer = TRADE_STUN;
+      return;
     }
+    this.applyPunch(other);
   };
 
   // NOTE (verified in the artifact): the artifact's Disarm() is CheckAimDrop(true) —
@@ -1470,25 +1477,6 @@
     return this.grabbedPlayerNr === 1 ? player1 : this.grabbedPlayerNr === 2 ? player2 : null;
   };
 
-  Player.prototype.enemyInMeleeRange = function (other) {
-    // EnemiesInMeleeRange (extracted): a live opponent overlapping my punch arc
-    if (!other || other.hp <= 0) return false;
-    return rectsOverlap(this.meleeHitBox(), other.getBounds());
-  };
-
-  Player.prototype.kickAttack = function (other, isJumpKick) {
-    // Kick() (extracted): gated by KickingCooldown; the cooldown (8) is only
-    // paid when the kick CONNECTS - a whiff costs nothing and flows into punch
-    if (this.kickCooldown > 0) return false;
-    var kicked = this.tryKickHit(other, isJumpKick);
-    this.breakGlassInReach(true); // the kick still smashes glass either way
-    if (kicked) {
-      this.kickCooldown = KICK_COOLDOWN;
-      this.kickFlash = 8;
-    }
-    return kicked;
-  };
-
   Player.prototype.startStagger = function () {
     // StartStagger: OnGround + CanStagger -> stagger (timer 6 + 8 * random).
     // The successful stagger does NOT touch velocity in the artifact; the
@@ -1536,7 +1524,7 @@
     return !!this.aimTurningAround || this.aimTurningAroundTimer > 0;
   };
 
-  Player.prototype.tryKickHit = function (other, isJumpKick) {
+  Player.prototype.tryKickHit = function (other) {
     // Same reason as tryPunchHit: the kick box follows the scaled body/leg.
     var kickReach = KICK_RANGE * PLAYER_SIZE_SCALE;
     var hitBox = {
@@ -1545,34 +1533,22 @@
       w: kickReach,
       h: 20 * PLAYER_SIZE_SCALE
     };
-    if (!rectsOverlap(hitBox, other.getBounds())) return false;
-    if (other.rolling) return false; // rolling dodges melee
-
-    // BeingKicked (extracted): DropGrabbedPlayer + CheckAimDrop, the victim is
-    // flipped to face the kicker FIRST, then:
-    //   - kick on the ground: ALWAYS a ragdoll Fall() and the victim keeps its
-    //     original facing (the flip is undone);
-    //   - jump kick: 50% Fall / 50% StartStagger (the stagger keeps the flipped
-    //     facing, i.e. staring back at the kicker).
-    // AirVelocity = kicker dir * 4 / -2 either way.
+    if (!rectsOverlap(hitBox, other.getBounds())) return;
+    if (other.rolling) return; // rolling dodges melee
+    // BeingKicked: aimed weapons drop; victim faces the kicker, then 50% knockdown
     if (other.aiming) other.abortAiming(true);
-    if (other.grabbedPlayerNr) other.dropGrabbed(false);
-    var facingBefore = other.lastDirX;
     other.lastDirX = -this.lastDirX;
     other.airVelocityX = KICK_KNOCKBACK_X * this.lastDirX;
     other.airVelocityY = KICK_KNOCKBACK_Y;
     other.onGround = false;
     other.groundedPlatform = null;
-    other.hp -= isJumpKick ? JUMPKICK_DAMAGE : KICK_DAMAGE;
+    other.hp -= KICK_DAMAGE; // KickDamage: 4
     other.hitFlash = 6;
-    if (Math.random() < 0.5 || !isJumpKick) {
-      other.lastDirX = facingBefore; // Fall(): the original facing returns
-      other.falling = true;
-      other.jumping = false;
+    if (Math.random() < 0.5) {
+      other.falling = true; // ragdoll fall; lands into Knockdowned
     } else {
-      other.startStagger(); // keeps the flipped facing (staring at the kicker)
+      other.startStagger();
     }
-    return true;
   };
 
   Player.prototype.breakGlassInReach = function (legsOnly) {
@@ -1856,11 +1832,6 @@
     }
 
     // ---------- Melee input (combo chain + kick) ----------
-    // ---------- Melee input (extracted Melee(): ONE key owns punch/kick) ----------
-    // Grounded and free: an enemy in punch range -> Punch; otherwise Kick() is
-    // tried first and only falls back to a whiffed Punch when nothing connects.
-    // Airborne: QueueJumpKick (fires once AirbornTimer >= 2.5).
-    // Already punching: press again past MinPunchComboFrame chains the combo.
     var meleePressed = controllable && this.justPunch();
     if (meleePressed && this.aiming) {
       // MELEE while aiming aborts the aim (no punch)
@@ -1877,12 +1848,10 @@
       // (the tackle-catch is momentary; this entry keeps the drag/throw game)
       this.grabbedPlayerNr = other.id;
       other.grabbedByPlayer(this);
-    } else if (meleePressed && !this.onGround) {
-      // QueueJumpKick (extracted): fires while still airborne
-      if (this.jumping) this.jumpKickQueued = true;
     } else if (meleePressed) {
       if (this.punching) {
         // Chaining: press again past the link's minimum animation frame
+        // (extracted MinPunchComboFrame, separate from the hit frame)
         if (
           this.punchFrame >= COMBO_MIN_FRAME[this.punchComboNr - 1] &&
           this.punchComboNr < COMBO_LINKS
@@ -1891,18 +1860,26 @@
           this.punchComboNr++;
           this.punchHitPerformed = false; // setter resets the hit flag per link
         }
-      } else if (this.enemyInMeleeRange(other)) {
-        // Enemy inside the punch arc: the punch owns the press (extracted)
+      } else if (this.kickCooldown <= 0) {
+        // No enemy in kick range check — punch starts the chain, kick is G
         this.punching = true;
         this.punchFrame = 0;
         this.punchQueued = false;
         this.punchHitPerformed = false;
-      } else if (!this.kickAttack(other, false)) {
-        // Nothing kickable in reach: whiffed punch starts the chain
-        this.punching = true;
-        this.punchFrame = 0;
-        this.punchQueued = false;
-        this.punchHitPerformed = false;
+      }
+    }
+    var kickPressed = controllable && this.justKick();
+    if (kickPressed) {
+      if (this.onGround) {
+        if (this.kickCooldown <= 0) {
+          this.kickCooldown = KICK_COOLDOWN;
+          this.kickFlash = 8;
+          this.tryKickHit(other);
+          this.breakGlassInReach(true);
+        }
+      } else if (this.jumping) {
+        // JumpKick: queued from the air, executes once AirbornTimer >= 2.5
+        this.jumpKickQueued = true;
       }
     }
     if (
@@ -1914,12 +1891,14 @@
       this.jumpKickQueued = false;
       this.jumpKickPerformed = true;
       this.kickFlash = 8;
-      this.tryKickHit(other, true);
+      this.tryKickHit(other);
       this.breakGlassInReach(true);
     }
 
     // ---------- Punch animation progression ----------
-    if (this.punching) {
+    // (extracted: the punch animation is driven inside the !IsStunned gate,
+    // so a stun mid-combo freezes the swing until the stun clears)
+    if (this.punching && this.stunTimer <= 0) {
       this.punchFrame++;
       // Combo 3 lunge: PunchGlideSpeed * (1 - progress)
       if (this.punchComboNr === COMBO_LINKS) {
@@ -3557,6 +3536,7 @@
     bot.wantSprint = false;
     bot.wantJump = false;
     bot.wantPunch = false;
+    bot.wantKick = false;
     bot.wantRoll = false;
     bot.wantShoot = false;
     bot.wantNade = false;
@@ -3603,6 +3583,7 @@
       bot.wantDir = dir;
       if (gap < 5) {
         bot.wantPunch = Math.random() < 0.7;
+        bot.wantKick = !bot.wantPunch && Math.random() < 0.5;
       }
       return;
     }
@@ -3830,6 +3811,10 @@
     if (bot.wantPunch) {
       keysJustPressed[bot.binding.punch] = true; // melee edge (combo chains)
       bot.wantPunch = false;
+    }
+    if (bot.wantKick) {
+      keysJustPressed[bot.binding.kick] = true;
+      bot.wantKick = false;
     }
   }
 

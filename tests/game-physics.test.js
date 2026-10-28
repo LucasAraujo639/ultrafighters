@@ -246,7 +246,7 @@ test('the third punch launches the victim, who lands knocked down and gets up', 
   attacker.tryPunchHit(victim);
 
   // PunchPlayer: AirVelocityX = 3 * attacker dir, AirVelocityY = -2.5, Fall()
-  // (extracted values, faithful to the artifact).
+  // (extracted values, restored).
   assert.equal(victim.falling, true, 'the combo finisher ragdolls the victim');
   assert.equal(victim.knockedDown, false);
   assert.equal(victim.onGround, false);
