@@ -1874,18 +1874,6 @@
     if (meleePressed && this.aiming) {
       // MELEE while aiming aborts the aim (no punch)
       this.abortAiming(false);
-    } else if (
-      meleePressed &&
-      !this.grabbedPlayerNr &&
-      other.knockedDown &&
-      other.hp > 0 &&
-      Math.abs(other.x + other.w / 2 - (this.x + this.w / 2)) <= TACKLE_ALIGN_X + 6 &&
-      Math.abs(this.y - other.y) <= TACKLE_ALIGN_Y + 20
-    ) {
-      // Grab a LYING victim: MELEE over a knocked-down body lifts it
-      // (the tackle-catch is momentary; this entry keeps the drag/throw game)
-      this.grabbedPlayerNr = other.id;
-      other.grabbedByPlayer(this);
     } else if (meleePressed) {
       if (this.punching) {
         // Chaining: press again past the link's minimum animation frame

@@ -1043,3 +1043,25 @@ test('health pickups heal for their extracted ammo value and cap at 100', () => 
   game.step();
   assert.equal(game.weaponItems[game.weaponItems.length - 1].taken, false, 'a medkit is not wasted at full HP');
 });
+
+test('MELEE over a lying body does not grab it', () => {
+  const { game, listeners } = createGame();
+  const [p1, p2] = game.players;
+  const floor = { x: 0, y: 500, w: 800, h: 100, solidSides: true, cloud: false, ladder: false };
+  game.platforms.length = 0;
+  game.platforms.push(floor);
+
+  resetPlayer(p1, 300, floor.y - p1.h, true);
+  p1.groundedPlatform = floor;
+  resetPlayer(p2, 306, floor.y - p2.h, true);
+  p2.groundedPlatform = floor;
+  p2.knockedDown = true;
+  p2.knockedDownFrame = 15;
+
+  keyDown(listeners, 'KeyF');
+  for (let frame = 0; frame < 10; frame++) game.step(); // within the lying window (frame 15 -> 25)
+
+  assert.equal(p1.grabbedPlayerNr, 0, 'the lying body is never grabbed');
+  assert.equal(p2.grabbedBy, null, 'the lying body is never held');
+  assert.equal(p2.knockedDown, true, 'the body stays lying where it was');
+});
