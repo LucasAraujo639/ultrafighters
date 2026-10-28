@@ -1017,3 +1017,29 @@ test('a fighter lying on the ground cannot be beaten down further', () => {
   assert.equal(victim.hp, hpBefore, 'no damage lands on a lying body');
   assert.equal(victim.falling, false, 'the body is not juggled while lying');
 });
+
+test('health pickups heal for their extracted ammo value and cap at 100', () => {
+  const { game, listeners } = createGame();
+  const player = game.players[0];
+  const floor = { x: 0, y: 500, w: 800, h: 100, solidSides: true, cloud: false, ladder: false };
+  game.platforms.length = 0;
+  game.platforms.push(floor);
+
+  resetPlayer(player, 400, floor.y - player.h, true);
+  player.groundedPlatform = floor;
+  player.hpDamageTimer = 1e9; // freeze passive regen for exact assertions
+  player.hp = 40;
+  game.weaponItems.push({ weapon: { kind: 'health', name: 'Medkit', ammo: 50, shape: 'medkit' }, x: player.x + 4, y: floor.y - 2, taken: false, pickupDelay: 0 });
+  game.step();
+  assert.equal(player.hp, 90, 'medkit heals 50');
+
+  // Pills: extracted Ammo 25, clamped at 100
+  game.weaponItems.push({ weapon: { kind: 'health', name: 'Pills', ammo: 25, shape: 'pills' }, x: player.x + 4, y: floor.y - 2, taken: false, pickupDelay: 0 });
+  game.step();
+  assert.equal(player.hp, 100, 'pills heal 25 but never exceed 100');
+
+  // At full health the pickup stays on the ground
+  game.weaponItems.push({ weapon: { kind: 'health', name: 'Medkit', ammo: 50, shape: 'medkit' }, x: player.x + 4, y: floor.y - 2, taken: false, pickupDelay: 0 });
+  game.step();
+  assert.equal(game.weaponItems[game.weaponItems.length - 1].taken, false, 'a medkit is not wasted at full HP');
+});

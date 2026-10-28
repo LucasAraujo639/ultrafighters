@@ -316,6 +316,10 @@
     name: 'Grenade', throwSpeed: 5.5, upBias: -2, throwTimer: 72, ammo: 3,
     radius: 90, damageMax: 30, damageMin: 5, shape: 'grenade'
   };
+  // Health pickups (extracted WeaponPowerupData): Ammo IS the heal amount,
+  // applied as HP += Ammo on pickup (clamped at 100 by the HP setter)
+  var HEALTH_PILLS = { kind: 'health', name: 'Pills', ammo: 25, shape: 'pills' };
+  var HEALTH_MEDKIT = { kind: 'health', name: 'Medkit', ammo: 50, shape: 'medkit' };
   // AbortAiming drop velocities (extracted): forced [hit while aiming], empty [toss]
   var DROP_TOSS_FORCED = { vx: -2, vy: 2 + 2 }; // vx *= -dir
   var DROP_TOSS_EMPTY = { vx: 2, vy: -1 }; // vx *= dir
@@ -2381,6 +2385,13 @@
           }
           this.throwable = { ammo: item.weapon.ammo };
           item.taken = true;
+        } else if (kind === 'health') {
+          // isHealth pickup (extracted): HP += Ammo, clamped at 100. Left on the
+          // ground while at full health so a medkit is never wasted.
+          if (this.hp >= 100) continue;
+          this.hp += item.weapon.ammo;
+          if (this.hp > 100) this.hp = 100;
+          item.taken = true;
         }
       }
     }
@@ -2644,7 +2655,14 @@
 
   // Weapon shape in the hand (local coords, held pointing right)
   function drawWeaponShape(c, x, y) {
-    if (c.shape === 'machete') {
+    if (c.shape === 'pills') {
+      px(x + 1, y, 8, 6, '#e8e4da'); // pill box
+      px(x + 1, y + 2, 8, 2, '#d0453a'); // red band
+    } else if (c.shape === 'medkit') {
+      px(x, y - 1, 12, 8, '#e8e4da'); // kit box
+      px(x + 5, y + 1, 2, 4, '#d0453a'); // cross vertical
+      px(x + 3, y + 2, 6, 2, '#d0453a'); // cross horizontal
+    } else if (c.shape === 'machete') {
       px(x, y, 3, 4, '#3a3a3a'); // grip
       px(x + 3, y - 1, 9, 3, '#c8ccd2'); // blade
       px(x + 10, y - 2, 2, 5, '#c8ccd2'); // tip
@@ -3298,7 +3316,7 @@
     weaponRespawnTimer--;
     if (weaponRespawnTimer <= 0) {
       weaponRespawnTimer = 300 + Math.floor(Math.random() * 180);
-      var catalog = [MELEE_WEAPONS.machete, MELEE_WEAPONS.axe, MELEE_WEAPONS.sword, GUNS.pistol];
+      var catalog = [MELEE_WEAPONS.machete, MELEE_WEAPONS.axe, MELEE_WEAPONS.sword, GUNS.pistol, HEALTH_PILLS, HEALTH_MEDKIT];
       var wp = weaponSpawnPoints[Math.floor(Math.random() * weaponSpawnPoints.length)];
       weaponItems.push({
         weapon: catalog[Math.floor(Math.random() * catalog.length)],
@@ -3438,7 +3456,7 @@
 
   function populateWeaponSpawns() {
     // The level's 6 weapon spawn points get a random catalog weapon
-    var catalog = [MELEE_WEAPONS.machete, MELEE_WEAPONS.axe, MELEE_WEAPONS.sword, GUNS.pistol];
+    var catalog = [MELEE_WEAPONS.machete, MELEE_WEAPONS.axe, MELEE_WEAPONS.sword, GUNS.pistol, HEALTH_PILLS, HEALTH_MEDKIT];
     weaponItems.length = 0;
     for (var i = 0; i < weaponSpawnPoints.length; i++) {
       var wp = weaponSpawnPoints[i];
