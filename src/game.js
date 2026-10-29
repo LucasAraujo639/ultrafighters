@@ -1759,12 +1759,14 @@
       if (Math.abs((c.y + c.h) - myFeet) > 6) continue; // cover is ground level
       var gapRight = c.x - (this.x + this.w); // crate on my right
       var gapLeft = this.x - (c.x + c.w); // crate on my left
-      if (gapRight >= -2 && gapRight <= 14) {
+      // 34px reach: after a roll triggered while running, the fighter stops
+      // about a roll-length away — the cover still reaches and snaps him in
+      if (gapRight >= -2 && gapRight <= 34) {
         this.x = c.x - this.w; // back flush against the crate's left face
         this.inCover = true;
         return;
       }
-      if (gapLeft >= -2 && gapLeft <= 14) {
+      if (gapLeft >= -2 && gapLeft <= 34) {
         this.x = c.x + c.w; // back flush against the crate's right face
         this.inCover = true;
         return;

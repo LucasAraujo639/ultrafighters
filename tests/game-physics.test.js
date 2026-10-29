@@ -1504,4 +1504,17 @@ test('crouching beside a crate takes cover: back flush, bullets hit the crate', 
   game.step();
   assert.equal(player.crouching, true);
   assert.equal(player.inCover, false, 'no crate, no cover');
+
+  // the walk + hold-S path (roll triggered while running) still ends in cover
+  game.crates.push({ x: 400, y: floor.y - 20, w: 20, h: 20, sx: 400, sy: floor.y - 20, vx: 0, vy: 0, hp: 20, hp0: 20, angle: 0, spin: 0, resting: true, dead: false });
+  resetPlayer(player, 360, floor.y - player.h, true);
+  player.groundedPlatform = floor;
+  keyDown(listeners, 'KeyD');
+  for (let frame = 0; frame < 20; frame++) game.step();
+  keyUp(listeners, 'KeyD');
+  keyDown(listeners, 'KeyS'); // roll first (kneel while running), then hold
+  for (let frame = 0; frame < 40; frame++) game.step();
+  keyUp(listeners, 'KeyS');
+  assert.equal(player.inCover, true, 'even after the roll, S ends in cover');
+  assert.ok(Math.abs(player.x + player.w - 400) < 1, 'flush against the crate face');
 });
