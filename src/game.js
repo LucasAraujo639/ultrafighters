@@ -467,6 +467,65 @@
   var crateRespawns = []; // { x, y, timer } — destroyed crates come back home
   var CRATE_RESPAWN_DELAY = 300; // 5 s at 60 Hz
 
+  // Box2D-style contact: a moving crate resolves against both fighters.
+  // Falling on a fighter knocks him down (BodyData CanKnockDownPlayer, crush
+  // damage 0); sliding past shoves him; rising under him carries him.
+  function crateHitsPlayer(c, p) {
+    if (c.dead || p.hp <= 0) return;
+    if (!rectsOverlap(p.getBounds(), c)) return;
+    var overlapX = Math.min(p.x + p.w, c.x + c.w) - Math.max(p.x, c.x);
+    var overlapY = Math.min(p.y + p.h, c.y + c.h) - Math.max(p.y, c.y);
+    if (overlapY <= overlapX) {
+      if (c.vy > 2 && !p.knockedDown) { // a real fall, not the ground micro-bounce
+        // the crate falls on him (from above or onto his head): CanKnockDownPlayer
+        // knocks him down and the crate slides past his side
+        p.knockedDown = true;
+        p.knockedDownFrame = 0;
+        p.falling = false;
+        p.jumping = false;
+        p.rolling = false;
+        p.diving = false;
+        p.stunTimer = 0;
+        p.airVelocityX = c.vx;
+        p.airVelocityY = 0;
+        p.x = (p.x + p.w / 2 < c.x + c.w / 2) ? c.x - p.w : c.x + c.w;
+      } else if (p.y + p.h / 2 <= c.y + c.h / 2) {
+        // the fighter is on top of the crate
+        if (p.falling) {
+          // PlayerLands on the crate: impact damage + Knockdowned, lying on it
+          var cImp = Math.abs(p.airVelocityY) - 3;
+          cImp *= 1.5;
+          if (cImp < 3) cImp = 0;
+          p.hp -= cImp;
+          p.falling = false;
+          p.jumping = false;
+          p.airVelocityX = 0;
+          p.airVelocityY = 0;
+          p.knockedDown = true;
+          p.knockedDownFrame = 0;
+          p.y = c.y - p.h;
+          p.onGround = true;
+          p.groundedCrate = c;
+          p.groundedPlatform = null;
+        } else {
+          // carried: stay glued to the crate's top and ride its motion
+          p.y = c.y - p.h;
+          if (p.airVelocityY > 0) p.airVelocityY = 0;
+          p.onGround = true;
+          p.groundedCrate = c;
+          p.groundedPlatform = null;
+          p.x += c.vx * 0.6;
+        }
+      } else {
+        // the crate is over his head and not falling: shove him aside
+        p.x = (p.x + p.w / 2 < c.x + c.w / 2) ? c.x - p.w : c.x + c.w;
+      }
+    } else {
+      // lateral contact: the crate shoves him aside (no knockdown)
+      p.x = (p.x + p.w / 2 < c.x + c.w / 2) ? c.x - p.w : c.x + c.w;
+    }
+  }
+
   function updateCrates() {
     for (var ri = crateRespawns.length - 1; ri >= 0; ri--) {
       var rq = crateRespawns[ri];
@@ -556,6 +615,9 @@
         c.resting = false;
         if (c.vy !== 0) c.angle += c.spin;
       }
+      // resolve the moved crate against both fighters (Box2D contacts)
+      crateHitsPlayer(c, player1);
+      crateHitsPlayer(c, player2);
     }
   }
 

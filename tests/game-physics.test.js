@@ -446,6 +446,7 @@ test('the camera zooms in when fighters are close and out once they separate', (
   const floor = { x: 0, y: 500, w: 800, h: 100, solidSides: true, cloud: false, ladder: false };
   game.platforms.length = 0;
   game.platforms.push(floor);
+  game.crates.length = 0; // camera-only test: no dynamic props in the frame
 
   function settle(x1, x2) {
     resetPlayer(player1, x1, floor.y - player1.h, true);
@@ -1314,4 +1315,70 @@ test('the jump kick always knocks its victim down', () => {
     kicker.tryKickHit(victim);
     assert.equal(victim.falling, true, 'every jump kick sends the victim down');
   }
+});
+
+test('a crate falling on a fighter knocks him down and slides past', () => {
+  const { game } = createGame();
+  const victim = game.players[0];
+  const floor = { x: 0, y: 500, w: 800, h: 100, solidSides: true, cloud: false, ladder: false };
+  game.platforms.length = 0;
+  game.platforms.push(floor);
+  game.crates.length = 0;
+  resetPlayer(victim, 400, floor.y - victim.h, true);
+  victim.groundedPlatform = floor;
+  // crate dropped right above him
+  game.crates.push({ x: 402, y: 420, w: 20, h: 20, sx: 402, sy: 420, vx: 0, vy: 0, hp: 20, hp0: 20, angle: 0, spin: 0, resting: false, dead: false });
+  let knocked = false;
+  for (let frame = 0; frame < 60; frame++) {
+    game.step();
+    if (victim.knockedDown) { knocked = true; break; }
+  }
+  assert.equal(knocked, true, 'the falling crate knocked him down');
+  assert.ok(victim.x < 402 || victim.x > 422, 'the crate slid past his side');
+  assert.ok(!game.crates.some(c => rectsOverlapHelp(c, victim)), 'no crate stays inside the body');
+});
+
+test('a sliding crate shoves a standing fighter without knocking him down', () => {
+  const { game } = createGame();
+  const victim = game.players[0];
+  const floor = { x: 0, y: 500, w: 800, h: 100, solidSides: true, cloud: false, ladder: false };
+  game.platforms.length = 0;
+  game.platforms.push(floor);
+  game.crates.length = 0;
+  resetPlayer(victim, 420, floor.y - victim.h, true);
+  victim.groundedPlatform = floor;
+  // crate kicked from the left, sliding along the floor
+  game.crates.push({ x: 395, y: floor.y - 20, w: 20, h: 20, sx: 395, sy: floor.y - 20, vx: 5, vy: 0, hp: 20, hp0: 20, angle: 0, spin: 0, resting: false, dead: false });
+  const kdBefore = victim.knockedDown;
+  for (let frame = 0; frame < 30; frame++) game.step();
+  assert.equal(victim.knockedDown, kdBefore, 'a sliding crate never floors a fighter');
+  assert.ok(victim.x > 420, 'the fighter was shoved aside by the crate');
+});
+
+function rectsOverlapHelp(a, b) {
+  return a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y;
+}
+
+test('a fighter standing on a kicked crate rides it instead of being pierced', () => {
+  const { game } = createGame();
+  const rider = game.players[0];
+  const floor = { x: 0, y: 500, w: 800, h: 100, solidSides: true, cloud: false, ladder: false };
+  game.platforms.length = 0;
+  game.platforms.push(floor);
+  game.crates.length = 0;
+  const crate = { x: 400, y: floor.y - 20, w: 20, h: 20, sx: 400, sy: floor.y - 20, vx: 2.2, vy: 0, hp: 20, hp0: 20, angle: 0, spin: 0, resting: true, dead: false };
+  game.crates.push(crate);
+  resetPlayer(rider, 402, floor.y - rider.h - 20, true); // feet on the crate top
+  rider.groundedPlatform = null;
+  rider.groundedCrate = crate;
+  for (let frame = 0; frame < 10; frame++) game.step();
+  assert.equal(rider.groundedCrate, crate, 'the fighter stands on the crate');
+  // the crate slides under his feet: he rides along, never pierced
+  let pierced = false;
+  for (let frame = 0; frame < 30; frame++) {
+    game.step();
+    if (rectsOverlapHelp(rider, crate)) pierced = true;
+  }
+  assert.equal(pierced, false, 'the crate never passes through the rider');
+  assert.ok(Math.abs((rider.y + rider.h) - crate.y) < 4, 'the rider stays glued to the crate top');
 });
