@@ -483,6 +483,7 @@ test('both players complete a single jump arc and cannot jump again in midair', 
     const other = game.players[1 - playerIndex];
     const floor = findLowerLeftFloor(game.platforms);
     const directionCode = playerIndex === 0 ? 'KeyD' : 'ArrowRight';
+    game.crates.length = 0; // pure jump test: no dynamic props in the way
     resetPlayer(player, 250, floor.y - player.h, true);
     resetPlayer(other, 700, 200, false);
     player.groundedPlatform = floor;
@@ -1135,4 +1136,37 @@ test('bullets damage crates and stop inside them', () => {
   game.step();
   assert.ok(game.crates[0].hp === 20, 'the crate took the bullet damage');
   assert.equal(game.bullets.length, 0, 'the crate ate the bullet');
+});
+
+test('a couple of punches breaks a crate into pieces', () => {
+  const { game } = createGame();
+  const floor = { x: 0, y: 500, w: 800, h: 100, solidSides: true, cloud: false, ladder: false };
+  game.platforms.length = 0;
+  game.platforms.push(floor);
+  game.crates.length = 0;
+  game.crates.push({ x: 400, y: 480, w: 20, h: 20, sx: 400, sy: 480, vx: 0, vy: 0, hp: 20, hp0: 20, angle: 0, spin: 0, resting: true, dead: false });
+  const crate = game.crates[0];
+  game.damageCrate(crate, 6); // first punch
+  assert.ok(!crate.dead && crate.hp === 14, 'still standing after one punch');
+  game.damageCrate(crate, 7); // second punch
+  assert.ok(!crate.dead && crate.hp === 7, 'cracking after two');
+  game.damageCrate(crate, 8); // third punch breaks it
+  assert.ok(crate.dead, 'three punches break the crate');
+  assert.ok(game.glassShards.length >= 3, 'it bursts into several pieces');
+});
+
+test('crates never leave the map', () => {
+  const { game } = createGame();
+  game.platforms.length = 0;
+  game.crates.length = 0;
+  game.crates.push({ x: 500, y: 500, w: 20, h: 20, sx: 300, sy: 440, vx: 0, vy: 0, hp: 20, hp0: 20, angle: 0, spin: 0, resting: true, dead: false });
+  // thrown into the pit -> returns home
+  game.crates[0].y = 630;
+  game.step();
+  assert.equal(game.crates[0].x, 300, 'pit fall respawns the crate at home');
+  assert.equal(game.crates[0].y, 440);
+  // thrown at the left wall -> clamped
+  game.crates[0].x = -30;
+  game.step();
+  assert.equal(game.crates[0].x, 0, 'side walls clamp the crate');
 });

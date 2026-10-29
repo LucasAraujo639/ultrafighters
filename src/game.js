@@ -329,8 +329,8 @@
   // CRATE props (extracted AddBox "CRATE"): 14x14, BodyData hp 40, dynamic
   // (gravity), Kickable KickPower 1.7, PlayerFragile, AffectedByExplosions,
   // breaks into 3 debris pieces.
-  var CRATE_SIZE = 14;
-  var CRATE_HP = 40;
+  var CRATE_SIZE = 20; // big enough to hide behind (the fighter is 16.8x26.4)
+  var CRATE_HP = 20; // breaks after a couple of punches (fists deal 6/7/8)
   var CRATE_GRAVITY = PLAYER_GRAVITY;
   var CRATE_FRICTION = 0.85;
   var CRATE_BOUNCE = 0.35;
@@ -442,6 +442,7 @@
   function createCrate(x, yBottom) {
     crates.push({
       x: x, y: yBottom - CRATE_SIZE, w: CRATE_SIZE, h: CRATE_SIZE,
+      sx: x, sy: yBottom - CRATE_SIZE, // home spot: crates that fall off respawn here
       vx: 0, vy: 0, hp: CRATE_HP, angle: 0, spin: 0,
       resting: true, hp0: CRATE_HP
     });
@@ -461,6 +462,14 @@
     for (var i = crates.length - 1; i >= 0; i--) {
       var c = crates[i];
       if (c.dead) { crates.splice(i, 1); continue; }
+      // crates never leave the map: side walls bounce them, the pit
+      // teleports them back home (OutsideTheWorld-style recovery)
+      if (c.y > 620) {
+        c.x = c.sx; c.y = c.sy;
+        c.vx = 0; c.vy = 0; c.spin = 0; c.angle = 0;
+        c.hp = CRATE_HP; c.resting = true;
+        continue;
+      }
       c.vy += CRATE_GRAVITY;
       var speed = Math.max(Math.abs(c.vx), Math.abs(c.vy));
       var steps = Math.max(1, Math.ceil(speed / 6));
@@ -495,6 +504,10 @@
             else if (c.vx < 0 && c.x < plat.x + plat.w && c.x + c.w > plat.x + plat.w) { c.x = plat.x + plat.w; c.vx = -c.vx * 0.4; }
           }
         }
+        // invisible side walls: crates bounce off the map edges
+        if (c.x < 0) { c.x = 0; c.vx = Math.abs(c.vx) * 0.4; }
+        else if (c.x + c.w > GAME_WIDTH) { c.x = GAME_WIDTH - c.w; c.vx = -Math.abs(c.vx) * 0.4; }
+
         // crate-on-crate stacking (simple)
         for (var oi = 0; oi < crates.length; oi++) {
           var o = crates[oi];
@@ -540,7 +553,7 @@
         x: c.x + c.w / 2 + debris[d][0], y: c.y + c.h / 2 + debris[d][1],
         vx: c.vx + Math.random() * 4 - 2, vy: c.vy - Math.random() * 3,
         angle: Math.random() * Math.PI, spin: Math.random() * 0.3 - 0.15,
-        size: 6 + Math.random() * 4, life: 30, color: '#8a6a41'
+        size: 6 + Math.random() * 4, life: 30, color: '#c89050'
       });
     }
   }
@@ -2769,6 +2782,30 @@
     return ((n >> 16) & 255) + ',' + ((n >> 8) & 255) + ',' + (n & 255);
   }
 
+  // The Superfighters crate: black frame, tan ring, peach fill, two parallel
+  // diagonals running bottom-left -> top-right (drawn in local top-left coords)
+  function drawCrateBox(x, y, s) {
+    var m = Math.max(2, Math.round(s * 0.12));
+    px(x, y, s, s, '#0a0a0a'); // black frame
+    var m2 = m + Math.max(1, Math.round(s * 0.06));
+    px(x + m, y + m, s - 2 * m, s - 2 * m, '#c89050'); // tan ring
+    var fillX = x + m2, fillY = y + m2, fillS = s - 2 * m2;
+    px(fillX, fillY, fillS, fillS, '#f0b878'); // peach fill
+    // two parallel diagonals, clipped to the fill
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(fillX, fillY, fillS, fillS);
+    ctx.clip();
+    ctx.strokeStyle = '#b5713a';
+    ctx.lineWidth = Math.max(2, Math.round(s * 0.09));
+    var d = Math.round(s * 0.22);
+    ctx.beginPath();
+    ctx.moveTo(x + m, y + s - m); ctx.lineTo(x + s - m, y + m); // main diagonal
+    ctx.moveTo(x + m + d, y + s - m); ctx.lineTo(x + s - m, y + m + d); // parallel offset
+    ctx.stroke();
+    ctx.restore();
+  }
+
   function drawCrates() {
     for (var i = 0; i < crates.length; i++) {
       var c = crates[i];
@@ -2776,23 +2813,13 @@
       ctx.save();
       ctx.translate(c.x + c.w / 2, c.y + c.h / 2);
       ctx.rotate(c.angle);
-      var half = c.w / 2;
-      px(-half, -half, c.w, c.h, WOOD.base);
-      px(-half, -half, c.w, 2, WOOD.light);
-      px(-half, half - 2, c.w, 2, WOOD.dark);
-      px(-half, -half, 2, c.h, WOOD.light);
-      px(half - 2, -half, 2, c.h, WOOD.dark);
-      ctx.strokeStyle = WOOD.light;
-      ctx.lineWidth = 1;
-      ctx.beginPath();
-      ctx.moveTo(-half + 2, -half + 2); ctx.lineTo(half - 2, half - 2);
-      ctx.moveTo(half - 2, -half + 2); ctx.lineTo(-half + 2, half - 2);
-      ctx.stroke();
+      drawCrateBox(-c.w / 2, -c.h / 2, c.w);
       // damage cracks
       if (c.hp < c.hp0 * 0.6) {
         ctx.strokeStyle = '#3a2c16';
+        ctx.lineWidth = 1;
         ctx.beginPath();
-        ctx.moveTo(-half + 3, 0); ctx.lineTo(0, 3); ctx.lineTo(half - 4, -2);
+        ctx.moveTo(-c.w / 2 + 3, 0); ctx.lineTo(0, 3); ctx.lineTo(c.w / 2 - 4, -2);
         ctx.stroke();
       }
       ctx.restore();
@@ -4271,20 +4298,8 @@
 
   // ---------- Map dressing (Police Station pixel-art, procedural) ----------
   function drawCrate(x, yBottom, size) {
-    // Wooden crate: planks + diagonal cross, like the original's AddBox props
     var s = size || 16;
-    var y = yBottom - s;
-    px(x, y, s, s, WOOD.base);
-    px(x, y, s, 2, WOOD.light);
-    px(x, y + s - 2, s, 2, WOOD.dark);
-    px(x, y, 2, s, WOOD.light);
-    px(x + s - 2, y, 2, s, WOOD.dark);
-    ctx.strokeStyle = WOOD.light;
-    ctx.lineWidth = 1;
-    ctx.beginPath();
-    ctx.moveTo(x + 2, y + 2); ctx.lineTo(x + s - 2, y + s - 2);
-    ctx.moveTo(x + s - 2, y + 2); ctx.lineTo(x + 2, y + s - 2);
-    ctx.stroke();
+    drawCrateBox(x, yBottom - s, s);
   }
 
   function drawBarrel(x, yBottom) {
@@ -4651,6 +4666,7 @@
     set botActive(v) { botActive = v; },
     restartRound: restartRound,
     explodeGrenade: explodeGrenade,
+    damageCrate: damageCrate,
     step: updateStep,
     render: render
   };
