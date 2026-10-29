@@ -1487,7 +1487,7 @@ test('crouching beside a crate takes cover: back flush, bullets hit the crate', 
   player.groundedPlatform = floor;
 
   keyDown(listeners, 'KeyS'); // crouch near the crate (4px gap)
-  game.step();
+  for (let frame = 0; frame < 8; frame++) game.step(); // the slide takes a few steps
   assert.equal(player.crouching, true);
   assert.equal(player.inCover, true, 'the crouch snapped his back to the crate');
   assert.equal(player.x + player.w, crate.x, 'flush against the crate face');

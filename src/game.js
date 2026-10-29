@@ -1275,6 +1275,7 @@
     this.knockedDownFrame = 0;
     this.crouching = false; // Kneel: holding DOWN standing still (cover pose)
     this.inCover = false; // crouched with the back flush against a crate
+    this.crouchCrate = null; // the crate he is taking cover behind
     this.rolling = false;
     this.rollFrame = 0;
     this.staggering = false;
@@ -1746,32 +1747,41 @@
     }
   };
 
-  // TakingCover (extracted): while crouched, find a ground-level crate within
-  // a couple of pixels and slide the fighter flush against it. inCover means
-  // the crate stands between him and whatever comes from that side.
-  Player.prototype.updateCrouchCover = function () {
-    this.inCover = false;
-    if (!this.crouching) return;
+  // TakingCover (extracted): find the ground-level crate to take cover behind.
+  // Moving toward it: within a step's reach. Standing still: any side within
+  // the roll distance (walk+S must end in cover, not be stolen by the roll).
+  Player.prototype.findCoverCrate = function (dir) {
     var myFeet = this.y + this.h;
+    var best = null, bestGap = 1e9;
     for (var i = 0; i < crates.length; i++) {
       var c = crates[i];
       if (c.dead) continue;
       if (Math.abs((c.y + c.h) - myFeet) > 6) continue; // cover is ground level
-      var gapRight = c.x - (this.x + this.w); // crate on my right
-      var gapLeft = this.x - (c.x + c.w); // crate on my left
-      // 34px reach: after a roll triggered while running, the fighter stops
-      // about a roll-length away — the cover still reaches and snaps him in
-      if (gapRight >= -2 && gapRight <= 34) {
-        this.x = c.x - this.w; // back flush against the crate's left face
-        this.inCover = true;
-        return;
+      var gapR = c.x - (this.x + this.w); // crate ahead when moving right
+      var gapL = this.x - (c.x + c.w); // crate ahead when moving left
+      var gap = -1;
+      if (dir > 0 && gapR >= -2 && gapR <= 24) gap = gapR;
+      else if (dir < 0 && gapL >= -2 && gapL <= 24) gap = gapL;
+      else if (dir === 0) {
+        if (gapR >= -2 && gapR <= 34) gap = gapR;
+        else if (gapL >= -2 && gapL <= 34) gap = gapL;
       }
-      if (gapLeft >= -2 && gapLeft <= 34) {
-        this.x = c.x + c.w; // back flush against the crate's right face
-        this.inCover = true;
-        return;
-      }
+      if (gap >= 0 && gap < bestGap) { best = c; bestGap = gap; }
     }
+    return best;
+  };
+
+  // Slide the fighter flush against the crate face (2 px/step, no teleport)
+  Player.prototype.snapToCover = function (c, dir) {
+    var crateRight = c.x >= this.x + this.w - 2;
+    var crateLeft = (c.x + c.w) <= this.x + 2;
+    var target;
+    if (crateLeft) target = c.x + c.w;
+    else if (crateRight) target = c.x - this.w;
+    else if (dir > 0) target = c.x - this.w;
+    else target = c.x + c.w;
+    if (this.x < target) this.x = Math.min(target, this.x + 2);
+    else if (this.x > target) this.x = Math.max(target, this.x - 2);
   };
 
   Player.prototype.checkFallOnPlayer = function (other) {
@@ -2009,6 +2019,14 @@
       if (this.pressRight()) dir += 1;
     }
 
+    // TakingCover intent (extracted): holding DOWN while there is a ground-level
+    // crate ahead (or one already at the back) takes cover instead of rolling.
+    this.crouchCrate = null;
+    if (controllable && this.pressDownKey() && this.hp > 0 &&
+        !this.aiming && !this.falling && !this.knockedDown && !this.climbing) {
+      this.crouchCrate = this.findCoverCrate(dir);
+    }
+
     // Roll / dive disambiguation (DOWN key):
     //   running + NOT sprinting -> roll (extracted Roll, costs 5)
     //   sprinting + DOWN -> full dive / tackle (DiveSpeed 2.0, costs 12)
@@ -2022,7 +2040,8 @@
       this.onGround &&
       !this.rolling &&
       !this.diving &&
-      !this.onLadder()
+      !this.onLadder() &&
+      !this.crouchCrate
     ) {
       if (this.sprinting) {
         this.drainEnergy(SPRINT_DIVE_COST);
@@ -2321,13 +2340,16 @@
       }
     }
 
-    // Crouch (Kneel): hold DOWN while standing still to take cover; the
-    // fighter stays put (movement locked) and presents the crouch pose
+    // Crouch (Kneel): hold DOWN standing still — or against a crate with a
+    // move key held — to take cover; movement locks, the back goes flush
     this.crouching = controllable && this.onGround && this.pressDownKey() &&
-      dir === 0 && !this.aiming && !this.rolling && !this.diving && !this.climbing && this.hp > 0;
-    // TakingCover (extracted): crouching beside a crate slides the fighter's
-    // back flush against it — bullets then hit the crate, not the fighter
-    this.updateCrouchCover();
+      (dir === 0 || this.crouchCrate) && !this.aiming && !this.rolling &&
+      !this.diving && !this.climbing && this.hp > 0;
+    this.inCover = false;
+    if (this.crouching && this.crouchCrate) {
+      this.snapToCover(this.crouchCrate, dir);
+      this.inCover = true;
+    }
 
     // ---------- Movement ----------
     if (this.crouching) {
