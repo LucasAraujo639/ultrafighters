@@ -1091,7 +1091,7 @@ test('crates are physical: standable, pushable, kickable, breakable', () => {
   }
   assert.equal(standing, true, 'the player stands on the crate');
 
-  // walking into a crate pushes it
+  // walking into a crate no longer moves it (immovable to footsteps)
   resetPlayer(player, 200, floor.y - player.h, true);
   player.groundedPlatform = floor;
   player.groundedCrate = null;
@@ -1099,7 +1099,7 @@ test('crates are physical: standable, pushable, kickable, breakable', () => {
   game.crates.push({ x: 250, y: floor.y - 14, w: 14, h: 14, vx: 0, vy: 0, hp: 40, hp0: 40, angle: 0, spin: 0, resting: true, dead: false });
   keyDown(listeners, 'KeyD');
   for (let frame = 0; frame < 20; frame++) game.step();
-  assert.ok(game.crates[0].x > 250, 'the walk pushes the crate to the right');
+  assert.ok(Math.abs(game.crates[0].x - 250) < 1e-6, 'walking never moves the crate');
 
   // a kick damages it, repeated hits break it into debris
   const target = game.crates[0];
@@ -1176,7 +1176,7 @@ test('crates never leave the map', () => {
   assert.ok(Math.abs(game.crates[0].x) < 1e-6, 'side walls clamp the crate');
 });
 
-test('crates block the fighter instead of being passed through', () => {
+test('crates are immovable to walking: blocked but never pushed', () => {
   const { game, listeners } = createGame();
   const player = game.players[0];
   const floor = { x: 0, y: 500, w: 800, h: 100, solidSides: true, cloud: false, ladder: false };
@@ -1189,5 +1189,38 @@ test('crates block the fighter instead of being passed through', () => {
   keyDown(listeners, 'KeyD');
   for (let frame = 0; frame < 30; frame++) game.step();
   assert.ok(player.x + player.w <= game.crates[0].x + 1e-6, 'the fighter is blocked by the crate');
-  assert.ok(game.crates[0].x > 300, 'and pushing moves the crate');
+  assert.ok(Math.abs(game.crates[0].x - 300) < 1e-6, 'walking never moves the crate');
+  assert.equal(player.running, true, 'the walk animation keeps running against it');
+});
+
+test('holding DOWN standing still takes the crouch cover pose', () => {
+  const { game, listeners } = createGame();
+  const player = game.players[0];
+  const floor = { x: 0, y: 500, w: 800, h: 100, solidSides: true, cloud: false, ladder: false };
+  game.platforms.length = 0;
+  game.platforms.push(floor);
+  resetPlayer(player, 400, floor.y - player.h, true);
+  player.groundedPlatform = floor;
+  keyDown(listeners, 'KeyS');
+  game.step();
+  assert.equal(player.crouching, true, 'DOWN while standing crouches');
+  assert.equal(player.airVelocityX, 0, 'crouch locks movement');
+  keyUp(listeners, 'KeyS');
+  game.step();
+  assert.equal(player.crouching, false);
+});
+
+test('a punch still shoves a crate; walking does not', () => {
+  const { game, listeners } = createGame();
+  const player = game.players[0];
+  const floor = { x: 0, y: 500, w: 800, h: 100, solidSides: true, cloud: false, ladder: false };
+  game.platforms.length = 0;
+  game.platforms.push(floor);
+  game.crates.length = 0;
+  game.crates.push({ x: 330, y: floor.y - 20, w: 20, h: 20, sx: 330, sy: floor.y - 20, vx: 0, vy: 0, hp: 20, hp0: 20, angle: 0, spin: 0, resting: true, dead: false });
+  resetPlayer(player, 310, floor.y - player.h, true);
+  player.groundedPlatform = floor;
+  keyDown(listeners, 'KeyF');
+  for (let frame = 0; frame < 14; frame++) game.step(); // punch lands at frame 10
+  assert.ok(game.crates[0].vx !== 0 || game.crates[0].x > 330, 'the punch shoved the crate');
 });

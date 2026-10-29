@@ -649,6 +649,7 @@
     if (p.diving) return 'dive';
     if (p.falling) return 'fall';
     if (p.punching) return 'attack';
+    if (p.crouching) return 'crouch';
     if (p.aiming) return 'guard';
     if (p.kickFlash > 0) {
       if (!p.onGround || p.jumpKickPerformed || p.jumpKickQueued) return 'kickWithJump';
@@ -1118,6 +1119,7 @@
     this.falling = false; // ragdoll: out of control until landing
     this.knockedDown = false; // lying on the ground (recovered by animation)
     this.knockedDownFrame = 0;
+    this.crouching = false; // Kneel: holding DOWN standing still (cover pose)
     this.rolling = false;
     this.rollFrame = 0;
     this.staggering = false;
@@ -2122,8 +2124,15 @@
       }
     }
 
+    // Crouch (Kneel): hold DOWN while standing still to take cover; the
+    // fighter stays put (movement locked) and presents the crouch pose
+    this.crouching = controllable && this.onGround && this.pressDownKey() &&
+      dir === 0 && !this.aiming && !this.rolling && !this.diving && !this.climbing && this.hp > 0;
+
     // ---------- Movement ----------
-    if (dir !== 0) {
+    if (this.crouching) {
+      this.airVelocityX = 0;
+    } else if (dir !== 0) {
       if (dir < 0) this._portalLocked = false;
       this.lastDirX = dir;
       if (this.onGround) {
@@ -2370,9 +2379,9 @@
           }
         }
       }
-      // Crates are solid: the fighter is blocked by them, and the blocked step's
-      // momentum is transferred to the crate as a push (grounded walkers land
-      // every frame, so this runs regardless of groundedThisFrame)
+      // Crates are immovable to footsteps: the fighter runs against them
+      // (the walk animation keeps playing) but they never budge. Only hits
+      // (punch, kick, jump kick) and explosions move a crate.
       for (var ci2 = 0; ci2 < crates.length; ci2++) {
         var crate2 = crates[ci2];
         if (crate2.dead) continue;
@@ -2383,9 +2392,6 @@
         if (wasBeside) continue; // spawned overlapping; vertical handles it
         if (h > 0) this.x = crate2.x - this.w;
         else if (h < 0) this.x = crate2.x + crate2.w;
-        var pushV = h * 0.8; // heavy: the crate takes the blocked momentum
-        if (h > 0 ? crate2.vx < pushV : crate2.vx > pushV) crate2.vx = pushV;
-        crate2.resting = false;
         h = 0;
         bounds = this.getBounds();
         break;
