@@ -1160,13 +1160,34 @@ test('crates never leave the map', () => {
   game.platforms.length = 0;
   game.crates.length = 0;
   game.crates.push({ x: 500, y: 500, w: 20, h: 20, sx: 300, sy: 440, vx: 0, vy: 0, hp: 20, hp0: 20, angle: 0, spin: 0, resting: true, dead: false });
-  // thrown into the pit -> returns home
+  // thrown into the pit -> breaks, then respawns at home after the delay
   game.crates[0].y = 630;
   game.step();
-  assert.equal(game.crates[0].x, 300, 'pit fall respawns the crate at home');
-  assert.equal(game.crates[0].y, 440);
+  assert.equal(game.crates.length, 0, 'the pit destroys the crate (no teleport)');
+  for (let frame = 0; frame < 299; frame++) game.step();
+  assert.equal(game.crates.length, 0, 'not yet: respawn delay is 5 s');
+  game.step();
+  assert.equal(game.crates.length, 1, 'the crate comes back home');
+  assert.ok(Math.abs(game.crates[0].x - 300) < 1e-6);
+  assert.ok(Math.abs(game.crates[0].y - 440) < 1, 'settled at home');
   // thrown at the left wall -> clamped
   game.crates[0].x = -30;
   game.step();
-  assert.equal(game.crates[0].x, 0, 'side walls clamp the crate');
+  assert.ok(Math.abs(game.crates[0].x) < 1e-6, 'side walls clamp the crate');
+});
+
+test('crates block the fighter instead of being passed through', () => {
+  const { game, listeners } = createGame();
+  const player = game.players[0];
+  const floor = { x: 0, y: 500, w: 800, h: 100, solidSides: true, cloud: false, ladder: false };
+  game.platforms.length = 0;
+  game.platforms.push(floor);
+  game.crates.length = 0;
+  game.crates.push({ x: 300, y: floor.y - 20, w: 20, h: 20, sx: 300, sy: floor.y - 20, vx: 0, vy: 0, hp: 20, hp0: 20, angle: 0, spin: 0, resting: true, dead: false });
+  resetPlayer(player, 260, floor.y - player.h, true);
+  player.groundedPlatform = floor;
+  keyDown(listeners, 'KeyD');
+  for (let frame = 0; frame < 30; frame++) game.step();
+  assert.ok(player.x + player.w <= game.crates[0].x + 1e-6, 'the fighter is blocked by the crate');
+  assert.ok(game.crates[0].x > 300, 'and pushing moves the crate');
 });

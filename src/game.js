@@ -458,16 +458,26 @@
   ];
   for (var _cs = 0; _cs < crateSpawns.length; _cs++) createCrate(crateSpawns[_cs][0], crateSpawns[_cs][1]);
 
+  var crateRespawns = []; // { x, y, timer } — destroyed crates come back home
+  var CRATE_RESPAWN_DELAY = 300; // 5 s at 60 Hz
+
   function updateCrates() {
+    for (var ri = crateRespawns.length - 1; ri >= 0; ri--) {
+      var rq = crateRespawns[ri];
+      rq.timer--;
+      if (rq.timer <= 0) {
+        createCrate(rq.x, rq.y);
+        crateRespawns.splice(ri, 1);
+      }
+    }
     for (var i = crates.length - 1; i >= 0; i--) {
       var c = crates[i];
       if (c.dead) { crates.splice(i, 1); continue; }
-      // crates never leave the map: side walls bounce them, the pit
-      // teleports them back home (OutsideTheWorld-style recovery)
+      // The pit destroys the crate; it respawns at home after a delay
       if (c.y > 620) {
-        c.x = c.sx; c.y = c.sy;
-        c.vx = 0; c.vy = 0; c.spin = 0; c.angle = 0;
-        c.hp = CRATE_HP; c.resting = true;
+        breakCrate(c);
+        crateRespawns.push({ x: c.sx, y: c.sy + CRATE_SIZE, timer: CRATE_RESPAWN_DELAY });
+        crates.splice(i, 1);
         continue;
       }
       c.vy += CRATE_GRAVITY;
@@ -2260,6 +2270,21 @@
       var subY0 = this.y;
       this.y += c / steps;
       bounds = this.getBounds();
+      if (c < 0 && !this.climbing) {
+        // rising into a crate's underside: head bump
+        for (var hbi = 0; hbi < crates.length; hbi++) {
+          var hb = crates[hbi];
+          if (hb.dead) continue;
+          if (this.x < hb.x + hb.w && this.x + this.w > hb.x &&
+              subY0 >= hb.y + hb.h - 1e-7 && this.y <= hb.y + hb.h + 1e-7) {
+            this.y = hb.y + hb.h;
+            this.airVelocityY = 0;
+            c = 0;
+            bounds = this.getBounds();
+            break;
+          }
+        }
+      }
       for (pi = 0; pi < platforms.length; pi++) {
         plat = platforms[pi];
         if (plat.ladder) continue;
@@ -2345,18 +2370,25 @@
           }
         }
       }
-      // ...and get pushed when walking into one (grounded walkers land every
-      // frame, so the push check must run regardless of groundedThisFrame)
+      // Crates are solid: the fighter is blocked by them, and the blocked step's
+      // momentum is transferred to the crate as a push (grounded walkers land
+      // every frame, so this runs regardless of groundedThisFrame)
       for (var ci2 = 0; ci2 < crates.length; ci2++) {
         var crate2 = crates[ci2];
         if (crate2.dead) continue;
-        var bodyOver = this.x < crate2.x + crate2.w && this.x + this.w > crate2.x &&
-          this.y < crate2.y + crate2.h && this.y + this.h > crate2.y;
-        if (!bodyOver) continue;
-        if (this.y + this.h > crate2.y + 2 && h !== 0) {
-          crate2.vx = h * 0.9;
-          crate2.resting = false;
-        }
+        if (!(this.y + this.h > crate2.y + 2)) continue; // beside it, not on top
+        var pxb = this.getBounds();
+        if (!rectsOverlap(pxb, crate2)) continue;
+        var wasBeside = prevX < crate2.x + crate2.w && prevX + this.w > crate2.x;
+        if (wasBeside) continue; // spawned overlapping; vertical handles it
+        if (h > 0) this.x = crate2.x - this.w;
+        else if (h < 0) this.x = crate2.x + crate2.w;
+        var pushV = h * 0.8; // heavy: the crate takes the blocked momentum
+        if (h > 0 ? crate2.vx < pushV : crate2.vx > pushV) crate2.vx = pushV;
+        crate2.resting = false;
+        h = 0;
+        bounds = this.getBounds();
+        break;
       }
 
       // Dive tackle: checked per substep while diving (extracted flow)
