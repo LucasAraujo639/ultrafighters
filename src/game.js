@@ -335,6 +335,12 @@
   var CRATE_FRICTION = 0.85;
   var CRATE_BOUNCE = 0.35;
   var CRATE_KICK_POWER = 1.7;
+  // Kick impulse on a crate (extracted Kick(): ApplyImpulse(dir*KickPower,
+  // -KickPower) plus the (0,-0.4) contact push). KickPower 1.7 m/s with the
+  // 30 px/m scale at 24 fps = 1.7*30/24 = 2.125 px/tick; total vertical
+  // -(1.7+0.4)*30/24 = -2.625. Same screen distance as the original.
+  var CRATE_KICK_PUSH_X = (1.7 * 30) / 24; // ≈ 2.125 px/step
+  var CRATE_KICK_PUSH_Y = (-(1.7 + 0.4) * 30) / 24; // ≈ -2.625 px/step
   var HEALTH_PILLS = { kind: 'health', name: 'Pills', ammo: 25, shape: 'pills' };
   var HEALTH_MEDKIT = { kind: 'health', name: 'Medkit', ammo: 50, shape: 'medkit' };
   // AbortAiming drop velocities (extracted): forced [hit while aiming], empty [toss]
@@ -577,7 +583,7 @@
     if (c.hp <= 0) breakCrate(c);
   }
 
-  function hitCratesInReach(attacker, reach, damage, kickPower) {
+  function hitCratesInReach(attacker, reach, damage, pushX, pushY) {
     var dir = attacker.lastDirX;
     var hitBox = {
       x: dir > 0 ? attacker.x + attacker.w : attacker.x - reach,
@@ -588,7 +594,7 @@
       var c = crates[i];
       if (c.dead) continue;
       if (!rectsOverlap(hitBox, c)) continue;
-      damageCrate(c, damage, dir * kickPower, -2.5);
+      damageCrate(c, damage, dir * (pushX || 3), pushY || -2.5);
     }
   }
 
@@ -2068,7 +2074,7 @@
           this.kickFlash = 8;
           this.tryKickHit(other);
           this.breakGlassInReach(true);
-          hitCratesInReach(this, KICK_RANGE * PLAYER_SIZE_SCALE, KICK_DAMAGE, 6 * CRATE_KICK_POWER);
+          hitCratesInReach(this, KICK_RANGE * PLAYER_SIZE_SCALE, KICK_DAMAGE, CRATE_KICK_PUSH_X, CRATE_KICK_PUSH_Y);
         }
       } else if (this.jumping) {
         // JumpKick: queued from the air, executes once AirbornTimer >= 2.5
@@ -2086,7 +2092,7 @@
       this.kickFlash = 8;
       this.tryKickHit(other);
       this.breakGlassInReach(true);
-      hitCratesInReach(this, KICK_RANGE * PLAYER_SIZE_SCALE, KICK_DAMAGE, 6 * CRATE_KICK_POWER);
+      hitCratesInReach(this, KICK_RANGE * PLAYER_SIZE_SCALE, KICK_DAMAGE, CRATE_KICK_PUSH_X, CRATE_KICK_PUSH_Y);
     }
 
     // ---------- Punch animation progression ----------

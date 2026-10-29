@@ -1210,6 +1210,23 @@ test('holding DOWN standing still takes the crouch cover pose', () => {
   assert.equal(player.crouching, false);
 });
 
+test('a kick launches a crate a moderate distance, not across the map', () => {
+  const { game, listeners } = createGame();
+  const player = game.players[0];
+  const floor = { x: 0, y: 500, w: 800, h: 100, solidSides: true, cloud: false, ladder: false };
+  game.platforms.length = 0;
+  game.platforms.push(floor);
+  game.crates.length = 0;
+  game.crates.push({ x: 330, y: floor.y - 20, w: 20, h: 20, sx: 330, sy: floor.y - 20, vx: 0, vy: 0, hp: 60, hp0: 60, angle: 0, spin: 0, resting: true, dead: false });
+  resetPlayer(player, 310, floor.y - player.h, true);
+  player.groundedPlatform = floor;
+  keyDown(listeners, 'KeyG'); // kick
+  for (let frame = 0; frame < 40; frame++) game.step();
+  const travelled = game.crates[0].x - 330;
+  assert.ok(travelled > 8, 'the kick moved the crate');
+  assert.ok(travelled < 60, `the crate did not fly across the map (moved ${travelled}px)`);
+});
+
 test('a punch still shoves a crate; walking does not', () => {
   const { game, listeners } = createGame();
   const player = game.players[0];
