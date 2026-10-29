@@ -1446,3 +1446,30 @@ test('a crate kicked into a stack pushes the stack, never through it', () => {
   assert.equal(overlapped, false, 'no crate ever ends up inside another');
   assert.ok(game.crates[1].x > 480 || game.crates[0].x > 480, 'the impact pushed the stack');
 });
+
+test('MELEE beside a crate: first press kicks, next presses flow into the punch combo', () => {
+  const { game, listeners } = createGame();
+  const player = game.players[0];
+  const floor = { x: 0, y: 500, w: 800, h: 100, solidSides: true, cloud: false, ladder: false };
+  game.platforms.length = 0;
+  game.platforms.push(floor);
+  game.crates.length = 0;
+  game.crates.push({ x: 330, y: floor.y - 20, w: 20, h: 20, sx: 330, sy: floor.y - 20, vx: 0, vy: 0, hp: 60, hp0: 60, angle: 0, spin: 0, resting: true, dead: false });
+  resetPlayer(player, 310, floor.y - player.h, true);
+  player.groundedPlatform = floor;
+
+  // press 1: kicks the crate
+  keyDown(listeners, 'KeyF');
+  game.step();
+  keyUp(listeners, 'KeyF');
+  assert.ok(player.kickFlash > 0, 'first press kicks the crate');
+  assert.equal(player.punching, false);
+  assert.ok(player.kickCooldown > 0, 'the kick went on cooldown');
+
+  // press 2 while the kick is cooling down: the punch combo starts anyway
+  keyDown(listeners, 'KeyF');
+  game.step();
+  keyUp(listeners, 'KeyF');
+  assert.equal(player.punching, true, 'the combo flows right after the kick');
+  assert.ok(player.kickCooldown > 0, 'the cooldown still had time left');
+});

@@ -400,7 +400,7 @@
   var PLAYER_SIZE_SCALE = 0.6; // the user-requested 40% smaller fighter body
   var PUNCH_ANIM_FRAMES = Math.round(12 * ANIM_TICKS_TO_STEPS); // PUNCH anim ≈ 12 artifact frames per link
   var PUNCH_RANGE = 16;
-  var KICK_COOLDOWN = Math.round(24 * ANIM_TICKS_TO_STEPS); // extracted 24 ticks
+  var KICK_COOLDOWN = Math.round(8 * ANIM_TICKS_TO_STEPS); // extracted KickingCooldown = 8 ticks
   var KICK_RANGE = 20;
   var ROLL_ANIM_FRAMES = 16; // roll duration in frames
   var LYING_ANIM_FRAMES = 30; // knocked-down recovery length
@@ -2225,7 +2225,7 @@
         }
         if (kickTarget && !this.meleeConnects(other)) {
           this.kickCooldown = KICK_COOLDOWN;
-          this.kickFlash = 8;
+          this.kickFlash = KICK_COOLDOWN;
           damageCrate(kickTarget, KICK_DAMAGE, this.lastDirX * CRATE_KICK_PUSH_X, CRATE_KICK_PUSH_Y);
           this.breakGlassInReach(true);
         } else {
@@ -2234,6 +2234,13 @@
           this.punchQueued = false;
           this.punchHitPerformed = false;
         }
+      } else if (!this.punching) {
+        // Extracted: the kick cooldown only blocks KICKS — keep pressing MELEE
+        // and the punch combo starts flowing right after the crate kick
+        this.punching = true;
+        this.punchFrame = 0;
+        this.punchQueued = false;
+        this.punchHitPerformed = false;
       }
     }
     if (
@@ -2244,7 +2251,7 @@
     ) {
       this.jumpKickQueued = false;
       this.jumpKickPerformed = true;
-      this.kickFlash = 8;
+      this.kickFlash = KICK_COOLDOWN;
       this.tryKickHit(other);
       this.breakGlassInReach(true);
       hitCratesInReach(this, KICK_RANGE * PLAYER_SIZE_SCALE, KICK_DAMAGE, CRATE_KICK_PUSH_X, CRATE_KICK_PUSH_Y);
