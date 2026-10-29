@@ -1759,12 +1759,12 @@
       if (Math.abs((c.y + c.h) - myFeet) > 6) continue; // cover is ground level
       var gapRight = c.x - (this.x + this.w); // crate on my right
       var gapLeft = this.x - (c.x + c.w); // crate on my left
-      if (gapRight >= -2 && gapRight <= 6) {
+      if (gapRight >= -2 && gapRight <= 14) {
         this.x = c.x - this.w; // back flush against the crate's left face
         this.inCover = true;
         return;
       }
-      if (gapLeft >= -2 && gapLeft <= 6) {
+      if (gapLeft >= -2 && gapLeft <= 14) {
         this.x = c.x + c.w; // back flush against the crate's right face
         this.inCover = true;
         return;
