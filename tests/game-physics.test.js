@@ -1495,7 +1495,7 @@ test('crouching beside a crate takes cover: back flush, bullets hit the crate', 
   // a bullet from the crate's side stops at the crate: full cover
   const hpBefore = player.hp;
   game.bullets.push({ x: 490, y: floor.y - 10, vx: -6, vy: 0, damage: 20, crit: false, owner: 2 });
-  game.step();
+  for (let frame = 0; frame < 3; frame++) game.step();
   assert.equal(game.bullets.length, 0, 'the bullet died on the crate');
   assert.equal(player.hp, hpBefore, 'the fighter took no damage in cover');
 
