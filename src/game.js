@@ -446,19 +446,21 @@
   // Dynamic crates (extracted CRATE props; pushable, kickable, standable)
   var crates = [];
   function createCrate(x, yBottom) {
-    crates.push({
+    var c = {
       x: x, y: yBottom - CRATE_SIZE, w: CRATE_SIZE, h: CRATE_SIZE,
       sx: x, sy: yBottom - CRATE_SIZE, // home spot: crates that fall off respawn here
       vx: 0, vy: 0, hp: CRATE_HP, angle: 0, spin: 0,
       resting: true, hp0: CRATE_HP
-    });
+    };
+    crates.push(c);
+    return c;
   }
   var crateSpawns = [
-    [44, 459], [60, 459], [52, 443], // stacked stack by the fence
+    [38, 459], [58, 459], [48, 443], // stacked pair by the fence (no overlap)
     [330, 459], // by the right side of the outdoor floor
-    [300, 352], // on the upper cloud shelf
-    [470, 339], [486, 339], // first floor, left of the jail window
-    [500, 339], [516, 339], // central platform
+    [140, 352], // on the upper cloud shelf
+    [464, 339], [488, 339], // first floor, left of the jail window
+    [500, 339], [522, 339], // central platform
     [760, 261], // second floor
     [520, 249] // on the long upper ledge
   ];
@@ -526,12 +528,59 @@
     }
   }
 
+  // Spawn settle: lift a crate until it clears everything, then drop it onto
+  // the first support below, so the scene opens with every crate in place
+  // (no visible falling on the first frames).
+  function crateHitsPlatform(c) {
+    for (var i = 0; i < platforms.length; i++) {
+      var plat = platforms[i];
+      if (plat.ladder) continue; // clouds hold props like everything else
+      if (rectsOverlap(c, plat)) return plat;
+    }
+    return null;
+  }
+
+  function settleCrate(c) {
+    var guard = 0;
+    // unclip only against platforms (against crates it just stacks on top)
+    while (guard++ < 800) {
+      var plat = crateHitsPlatform(c);
+      if (!plat) break;
+      c.y -= 2;
+    }
+    // drop until it lands on a platform or snaps onto another crate's top
+    var step = 1;
+    guard = 0;
+    while (guard++ < 400) {
+      c.y += step;
+      if (crateHitsPlatform(c)) {
+        c.y -= step;
+        if (step > 0.05) { step /= 2; continue; }
+        break;
+      }
+      var stacked = null;
+      for (var j = 0; j < crates.length; j++) {
+        var o = crates[j];
+        if (o === c || o.dead) continue;
+        if (c.x < o.x + o.w && c.x + c.w > o.x &&
+            c.y + c.h > o.y && c.y + c.h <= o.y + o.h &&
+            c.y + c.h - step <= o.y + 0.05) { // was falling from above its top
+          stacked = o;
+          break;
+        }
+      }
+      if (stacked) { c.y = stacked.y - c.h; break; }
+    }
+    c.vy = 0;
+    c.resting = true;
+  }
+
   function updateCrates() {
     for (var ri = crateRespawns.length - 1; ri >= 0; ri--) {
       var rq = crateRespawns[ri];
       rq.timer--;
       if (rq.timer <= 0) {
-        createCrate(rq.x, rq.y);
+        settleCrate(createCrate(rq.x, rq.y));
         crateRespawns.splice(ri, 1);
       }
     }
@@ -553,10 +602,10 @@
         var prevBottom = c.y + c.h;
         c.x += c.vx / steps;
         c.y += c.vy / steps;
-        // platform landings + solid sides
+        // platform landings + solid sides (clouds hold props, only players drop through)
         for (var pi = 0; pi < platforms.length; pi++) {
           var plat = platforms[pi];
-          if (plat.ladder || plat.cloud || plat.oneWay) continue;
+          if (plat.ladder) continue;
           var overlapX = c.x < plat.x + plat.w && c.x + c.w > plat.x;
           if (!overlapX) continue;
           var top = platformBoundaryForSpan(plat, c.x, c.x + c.w, false);
@@ -3476,6 +3525,12 @@
 
   // Snap the first rendered frame to the spawn framing instead of easing from 1x.
   updateCamera(true);
+
+  // Settle every crate onto its support BEFORE the first rendered frame so the
+  // scene opens with everything already in place (no falling crates on start).
+  // Bottom-first order: supports land before the crates stacked on them.
+  var _settleOrder = crates.slice().sort(function (a, b) { return b.y - a.y; });
+  for (var _cs2 = 0; _cs2 < _settleOrder.length; _cs2++) settleCrate(_settleOrder[_cs2]);
 
   // ---------- World entities: bullets / grenades / explosions / dropped items ----------
   function updateBullets() {

@@ -1159,6 +1159,7 @@ test('a couple of punches breaks a crate into pieces', () => {
 test('crates never leave the map', () => {
   const { game } = createGame();
   game.platforms.length = 0;
+  game.platforms.push({ x: 0, y: 500, w: 800, h: 100, solidSides: true, cloud: false, ladder: false });
   game.crates.length = 0;
   game.crates.push({ x: 500, y: 500, w: 20, h: 20, sx: 300, sy: 440, vx: 0, vy: 0, hp: 20, hp0: 20, angle: 0, spin: 0, resting: true, dead: false });
   // thrown into the pit -> breaks, then respawns at home after the delay
@@ -1170,7 +1171,7 @@ test('crates never leave the map', () => {
   game.step();
   assert.equal(game.crates.length, 1, 'the crate comes back home');
   assert.ok(Math.abs(game.crates[0].x - 300) < 1e-6);
-  assert.ok(Math.abs(game.crates[0].y - 440) < 1, 'settled at home');
+  assert.ok(Math.abs(game.crates[0].y - 480) < 1, 'settled onto the floor at home x');
   // thrown at the left wall -> clamped
   game.crates[0].x = -30;
   game.step();
@@ -1381,4 +1382,18 @@ test('a fighter standing on a kicked crate rides it instead of being pierced', (
   }
   assert.equal(pierced, false, 'the crate never passes through the rider');
   assert.ok(Math.abs((rider.y + rider.h) - crate.y) < 4, 'the rider stays glued to the crate top');
+});
+
+test('crates spawn already settled: the scene opens with everything in place', () => {
+  const { game } = createGame();
+  const start = game.crates.map(c => ({ x: c.x, y: c.y }));
+  assert.ok(start.length > 0, 'the map spawns crates');
+  for (let frame = 0; frame < 60; frame++) game.step();
+  for (let i = 0; i < game.crates.length; i++) {
+    assert.ok(
+      Math.abs(game.crates[i].y - start[i].y) < 1 &&
+      Math.abs(game.crates[i].x - start[i].x) < 1,
+      'crate ' + i + ' never visibly falls on scene open (<1px drift)'
+    );
+  }
 });
