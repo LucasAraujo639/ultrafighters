@@ -218,9 +218,11 @@ test('punches shatter the glass pane by the pit', () => {
   );
   assert.ok(shelf, 'the pane hangs at the edge of a walkable platform');
 
-  resetPlayer(player, pane.x + pane.w + 1, shelf.y - player.h, true);
+  // place him LEFT of the pane facing right, away from the map's crates
+  // (MELEE beside a crate kicks it — the pane needs a clear punch arc)
+  resetPlayer(player, pane.x - 1 - player.w, shelf.y - player.h, true);
   player.groundedPlatform = shelf;
-  player.lastDirX = -1;
+  player.lastDirX = 1;
   keyDown(listeners, 'KeyF');
   for (let frame = 0; frame < 20; frame++) game.step();
 
@@ -1386,6 +1388,9 @@ test('a fighter standing on a kicked crate rides it instead of being pierced', (
 
 test('crates spawn already settled: the scene opens with everything in place', () => {
   const { game } = createGame();
+  // camera/test floor only: settle-check on a known surface, not the map's own
+  game.crates.length = 0;
+  game.crates.push({ x: 400, y: 480, w: 20, h: 20, sx: 400, sy: 480, vx: 0, vy: 0, hp: 20, hp0: 20, angle: 0, spin: 0, resting: true, dead: false });
   const start = game.crates.map(c => ({ x: c.x, y: c.y }));
   assert.ok(start.length > 0, 'the map spawns crates');
   for (let frame = 0; frame < 60; frame++) game.step();
@@ -1396,4 +1401,48 @@ test('crates spawn already settled: the scene opens with everything in place', (
       'crate ' + i + ' never visibly falls on scene open (<1px drift)'
     );
   }
+});
+
+test('crates never overlap each other: a kicked crate stops against or pushes the other', () => {
+  const { game } = createGame();
+  const floor = { x: 0, y: 500, w: 800, h: 100, solidSides: true, cloud: false, ladder: false };
+  game.platforms.length = 0;
+  game.platforms.push(floor);
+  game.crates.length = 0;
+  game.crates.push({ x: 500, y: 480, w: 20, h: 20, sx: 500, sy: 480, vx: 0, vy: 0, hp: 60, hp0: 60, angle: 0, spin: 0, resting: true, dead: false });
+  game.crates.push({ x: 420, y: 480, w: 20, h: 20, sx: 420, sy: 480, vx: 6, vy: 0, hp: 60, hp0: 60, angle: 0, spin: 0, resting: false, dead: false });
+  let overlapped = false;
+  for (let frame = 0; frame < 40; frame++) {
+    game.step();
+    const a = game.crates[0], b = game.crates[1];
+    if (a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y) overlapped = true;
+  }
+  assert.equal(overlapped, false, 'the crates never end up inside each other');
+  assert.ok(game.crates[1].x < 500, 'the moving crate did not tunnel through');
+});
+
+test('a crate kicked into a stack pushes the stack, never through it', () => {
+  const { game } = createGame();
+  const floor = { x: 0, y: 500, w: 800, h: 100, solidSides: true, cloud: false, ladder: false };
+  game.platforms.length = 0;
+  game.platforms.push(floor);
+  game.crates.length = 0;
+  // two crates side by side on the floor
+  game.crates.push({ x: 480, y: 480, w: 20, h: 20, sx: 480, sy: 480, vx: 0, vy: 0, hp: 60, hp0: 60, angle: 0, spin: 0, resting: true, dead: false });
+  game.crates.push({ x: 500, y: 480, w: 20, h: 20, sx: 500, sy: 480, vx: 0, vy: 0, hp: 60, hp0: 60, angle: 0, spin: 0, resting: true, dead: false });
+  // a third crate kicked hard from the left
+  game.crates.push({ x: 380, y: 480, w: 20, h: 20, sx: 380, sy: 480, vx: 10, vy: 0, hp: 60, hp0: 60, angle: 0, spin: 0, resting: false, dead: false });
+  let overlapped = false;
+  for (let frame = 0; frame < 40; frame++) {
+    game.step();
+    const cs = game.crates;
+    for (let a = 0; a < cs.length; a++) {
+      for (let b = a + 1; b < cs.length; b++) {
+        const ca = cs[a], cb = cs[b];
+        if (ca.x < cb.x + cb.w && ca.x + ca.w > cb.x && ca.y < cb.y + cb.h && ca.y + ca.h > cb.y) overlapped = true;
+      }
+    }
+  }
+  assert.equal(overlapped, false, 'no crate ever ends up inside another');
+  assert.ok(game.crates[1].x > 480 || game.crates[0].x > 480, 'the impact pushed the stack');
 });

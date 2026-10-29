@@ -632,12 +632,11 @@
         if (c.x < 0) { c.x = 0; c.vx = Math.abs(c.vx) * 0.4; }
         else if (c.x + c.w > GAME_WIDTH) { c.x = GAME_WIDTH - c.w; c.vx = -Math.abs(c.vx) * 0.4; }
 
-        // crate-on-crate stacking (simple)
+        // crate-on-crate: land on top when falling from above
         for (var oi = 0; oi < crates.length; oi++) {
           var o = crates[oi];
           if (o === c || o.dead) continue;
-          var ox = c.x < o.x + o.w && c.x + c.w > o.x;
-          if (!ox) continue;
+          if (!(c.x < o.x + o.w && c.x + c.w > o.x)) continue;
           var oTop = o.y;
           var prevCBottom = prevBottom;
           if (c.vy >= 0 && prevCBottom <= oTop + 1e-7 && c.y + c.h >= oTop - 1e-7) {
@@ -646,6 +645,14 @@
             c.vx *= 0.8;
             grounded = true;
             o.vx += c.vx * 0.25; // weight transfer
+          } else if (Math.abs(c.vx) > Math.abs(o.vx) + 0.01 && c.y + c.h > o.y + 2) {
+            // ramming another crate sideways: transfer momentum and stop
+            var cxEdge = (c.vx > 0) ? o.x - c.w : o.x + o.w;
+            if ((c.vx > 0 && c.x > cxEdge) || (c.vx < 0 && c.x < cxEdge)) {
+              c.x = cxEdge;
+              o.vx += c.vx * 0.5;
+              c.vx *= 0.5;
+            }
           }
         }
       }
@@ -667,6 +674,36 @@
       // resolve the moved crate against both fighters (Box2D contacts)
       crateHitsPlayer(c, player1);
       crateHitsPlayer(c, player2);
+    }
+
+    // Separate any overlapping crate pairs (3 passes: stacks resolve bottom-up
+    // transitively). Vertical overlaps stack, horizontal ones push apart.
+    for (var pass = 0; pass < 3; pass++) {
+      for (var ai = 0; ai < crates.length; ai++) {
+        for (var bi = ai + 1; bi < crates.length; bi++) {
+          var ca = crates[ai], cb = crates[bi];
+          if (ca.dead || cb.dead) continue;
+          var ovX = Math.min(ca.x + ca.w, cb.x + cb.w) - Math.max(ca.x, cb.x);
+          var ovY = Math.min(ca.y + ca.h, cb.y + cb.h) - Math.max(ca.y, cb.y);
+          if (ovX <= 0 || ovY <= 0) continue;
+          if (ovY <= ovX) {
+            var upper = (ca.y + ca.h / 2 <= cb.y + cb.h / 2) ? ca : cb;
+            var lower = (upper === ca) ? cb : ca;
+            upper.y = lower.y - upper.h;
+            if (upper.vy > 0) upper.vy = 0;
+            upper.resting = true;
+          } else {
+            var moving = (Math.abs(ca.vx) >= Math.abs(cb.vx)) ? ca : cb;
+            var other2 = (moving === ca) ? cb : ca;
+            if (moving.x + moving.w / 2 < other2.x + other2.w / 2) moving.x = other2.x - moving.w;
+            else moving.x = other2.x + other2.w;
+            if (Math.abs(other2.vx) < Math.abs(moving.vx) * 0.5) {
+              other2.vx += moving.vx * 0.5;
+              moving.vx *= 0.5;
+            }
+          }
+        }
+      }
     }
   }
 
