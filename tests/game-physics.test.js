@@ -1473,3 +1473,53 @@ test('MELEE beside a crate: first press kicks, next presses flow into the punch 
   assert.equal(player.punching, true, 'the combo flows right after the kick');
   assert.ok(player.kickCooldown > 0, 'the cooldown still had time left');
 });
+
+test('DOWN held while walking crouch-walks into cover behind a crate', () => {
+  const { game, listeners } = createGame();
+  const player = game.players[0];
+  const floor = { x: 0, y: 500, w: 800, h: 100, solidSides: true, cloud: false, ladder: false };
+  game.platforms.length = 0;
+  game.platforms.push(floor);
+  game.crates.length = 0;
+  game.crates.push({ x: 420, y: floor.y - 20, w: 20, h: 20, sx: 420, sy: floor.y - 20, vx: 0, vy: 0, hp: 60, hp0: 60, angle: 0, spin: 0, resting: true, dead: false });
+  resetPlayer(player, 350, floor.y - player.h, true);
+  player.groundedPlatform = floor;
+
+  // hold DOWN + RIGHT: crouch-walk toward the crate at half speed
+  keyDown(listeners, 'KeyS');
+  keyDown(listeners, 'KeyD');
+  game.step();
+  assert.equal(player.crouching, true, 'DOWN + walk = crouch-walk');
+  const startX = player.x;
+  for (let frame = 0; frame < 120; frame++) game.step();
+
+  // arrived (blocked) at the crate, still crouched behind it
+  assert.ok(player.x + player.w <= game.crates[0].x + 1e-6, 'stopped at the crate');
+  assert.ok(player.x > startX, 'he shuffled toward the crate');
+  assert.equal(player.crouching, true, 'stays crouched behind the crate');
+  assert.ok(player.x - startX < 40 * 1.7, 'crouch-walk is slower than a run');
+
+  // release DOWN and walk: he stands up and moves freely again
+  keyUp(listeners, 'KeyS');
+  game.step();
+  assert.equal(player.crouching, false, 'releasing DOWN stands him up');
+  const xBefore = player.x;
+  for (let frame = 0; frame < 5; frame++) game.step();
+  assert.equal(player.x, xBefore, 'still blocked by the crate while standing');
+});
+
+test('sprint + DOWN still dives (crouch does not eat the dive)', () => {
+  const { game, listeners } = createGame();
+  const player = game.players[0];
+  const floor = { x: 0, y: 500, w: 800, h: 100, solidSides: true, cloud: false, ladder: false };
+  game.platforms.length = 0;
+  game.platforms.push(floor);
+  resetPlayer(player, 300, floor.y - player.h, true);
+  player.groundedPlatform = floor;
+  // arm the sprint (double-tap) then hold DOWN
+  keyDown(listeners, 'KeyD'); game.step(); keyUp(listeners, 'KeyD'); game.step();
+  keyDown(listeners, 'KeyD'); game.step(); // sprinting
+  keyDown(listeners, 'KeyS');
+  game.step();
+  assert.equal(player.diving, true, 'sprint + DOWN = dive');
+});

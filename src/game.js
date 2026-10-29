@@ -909,6 +909,7 @@
   // full dimension before building both the fixture and its visual box.
   var MAP_AREA = { x: 105, y: -81, width: GAME_WIDTH, height: GAME_HEIGHT };
   var TILE_COLLISION_PADDING = 0.5;
+  var CROUCH_WALK_FACTOR = 0.5; // crouch-walk: half the run speed toward cover
   var GROUND_SUPPORT_TOLERANCE = 1; // retain the engine's existing 1 px support probe
 
   function mapPointToCanvas(x, y) {
@@ -2292,14 +2293,19 @@
       }
     }
 
-    // Crouch (Kneel): hold DOWN while standing still to take cover; the
-    // fighter stays put (movement locked) and presents the crouch pose
+    // Crouch (Kneel): hold DOWN to take cover — standing still or shuffling
+    // toward cover (crouch-walk, half speed). Holding DOWN while SPRINTING
+    // stays a dive, and a DOWN tap while running stays a roll: those roll
+    // states cancel the crouch.
     this.crouching = controllable && this.onGround && this.pressDownKey() &&
-      dir === 0 && !this.aiming && !this.rolling && !this.diving && !this.climbing && this.hp > 0;
+      !this.sprinting && !this.aiming && !this.rolling && !this.diving &&
+      !this.climbing && this.hp > 0;
 
     // ---------- Movement ----------
     if (this.crouching) {
-      this.airVelocityX = 0;
+      // crouch-walk: half-speed shuffle; against a crate he just stays crouched
+      this.airVelocityX = dir * (PLAYER_RUN_SPEED * CROUCH_WALK_FACTOR);
+      if (dir !== 0) this.lastDirX = dir;
     } else if (dir !== 0) {
       if (dir < 0) this._portalLocked = false;
       this.lastDirX = dir;
