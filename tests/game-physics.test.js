@@ -1106,7 +1106,7 @@ test('crates are physical: standable, pushable, kickable, breakable', () => {
   target.hp = 4; // one kick (4) breaks it
   player.x = target.x - 20;
   keyUp(listeners, 'KeyD');
-  keyDown(listeners, 'KeyG');
+  keyDown(listeners, 'KeyF');
   for (let frame = 0; frame < 10; frame++) game.step();
   assert.ok(game.crates.indexOf(target) === -1 || target.dead, 'the broken crate is gone');
   assert.ok(game.glassShards.length > 0, 'the crate throws wood debris');
@@ -1220,7 +1220,7 @@ test('a kick launches a crate a moderate distance, not across the map', () => {
   game.crates.push({ x: 330, y: floor.y - 20, w: 20, h: 20, sx: 330, sy: floor.y - 20, vx: 0, vy: 0, hp: 60, hp0: 60, angle: 0, spin: 0, resting: true, dead: false });
   resetPlayer(player, 310, floor.y - player.h, true);
   player.groundedPlatform = floor;
-  keyDown(listeners, 'KeyG'); // kick
+  keyDown(listeners, 'KeyF'); // kick
   for (let frame = 0; frame < 40; frame++) game.step();
   const travelled = game.crates[0].x - 330;
   assert.ok(travelled > 8, 'the kick moved the crate');
@@ -1240,4 +1240,40 @@ test('a punch still shoves a crate; walking does not', () => {
   keyDown(listeners, 'KeyF');
   for (let frame = 0; frame < 14; frame++) game.step(); // punch lands at frame 10
   assert.ok(game.crates[0].vx !== 0 || game.crates[0].x > 330, 'the punch shoved the crate');
+});
+
+test('the kick key is gone: MELEE kicks crates and jump kicks in the air', () => {
+  const { game, listeners } = createGame();
+  const player = game.players[0];
+  const floor = { x: 0, y: 500, w: 800, h: 100, solidSides: true, cloud: false, ladder: false };
+  game.platforms.length = 0;
+  game.platforms.push(floor);
+  game.crates.length = 0;
+  game.crates.push({ x: 330, y: floor.y - 20, w: 20, h: 20, sx: 330, sy: floor.y - 20, vx: 0, vy: 0, hp: 20, hp0: 20, angle: 0, spin: 0, resting: true, dead: false });
+  resetPlayer(player, 310, floor.y - player.h, true);
+  player.groundedPlatform = floor;
+
+  // the old dedicated kick key does nothing now
+  keyDown(listeners, 'KeyG');
+  game.step();
+  keyUp(listeners, 'KeyG');
+  assert.equal(player.kickCooldown, 0, 'KeyG no longer triggers a kick');
+
+  // MELEE beside a crate kicks it (no punch started)
+  keyDown(listeners, 'KeyF');
+  game.step();
+  keyUp(listeners, 'KeyF');
+  assert.ok(player.kickFlash > 0, 'MELEE beside a crate kicks it');
+  assert.ok(game.crates[0].hp < 20, 'the crate took the kick damage');
+  assert.equal(player.punching, false, 'no punch was started');
+
+  // MELEE while airborne queues the jump kick (with timer below the gate it
+  // stays queued; from 2.5 it executes in the same step)
+  resetPlayer(player, 400, 300, false);
+  player.jumping = true;
+  player.airbornTimer = 0;
+  keyDown(listeners, 'KeyF');
+  game.step();
+  keyUp(listeners, 'KeyF');
+  assert.equal(player.jumpKickQueued, true, 'airborne MELEE queues the jump kick');
 });

@@ -2047,7 +2047,11 @@
       // MELEE while aiming aborts the aim (no punch)
       this.abortAiming(false);
     } else if (meleePressed) {
-      if (this.punching) {
+      // Extracted Melee(): airborne MELEE queues the jump kick (executes once
+      // AirbornTimer >= 2.5); there is no dedicated kick key anymore.
+      if (this.jumping && !this.onGround) {
+        this.jumpKickQueued = true;
+      } else if (this.punching) {
         // Chaining: press again past the link's minimum animation frame
         // (extracted MinPunchComboFrame, separate from the hit frame)
         if (
@@ -2059,26 +2063,30 @@
           this.punchHitPerformed = false; // setter resets the hit flag per link
         }
       } else if (this.kickCooldown <= 0) {
-        // No enemy in kick range check — punch starts the chain, kick is G
-        this.punching = true;
-        this.punchFrame = 0;
-        this.punchQueued = false;
-        this.punchHitPerformed = false;
-      }
-    }
-    var kickPressed = controllable && this.justKick();
-    if (kickPressed) {
-      if (this.onGround) {
-        if (this.kickCooldown <= 0) {
+        // Extracted: with no enemy in melee range, MELEE tries a KICK on
+        // nearby kickable objects (crates) before falling back to a punch
+        var kickReach = KICK_RANGE * PLAYER_SIZE_SCALE;
+        var kickBox = {
+          x: this.lastDirX > 0 ? this.x + this.w : this.x - kickReach,
+          y: this.y,
+          w: kickReach, h: this.h
+        };
+        var kickTarget = null;
+        for (var kci = 0; kci < crates.length; kci++) {
+          var kc = crates[kci];
+          if (!kc.dead && rectsOverlap(kickBox, kc)) { kickTarget = kc; break; }
+        }
+        if (kickTarget && !this.meleeConnects(other)) {
           this.kickCooldown = KICK_COOLDOWN;
           this.kickFlash = 8;
-          this.tryKickHit(other);
+          damageCrate(kickTarget, KICK_DAMAGE, this.lastDirX * CRATE_KICK_PUSH_X, CRATE_KICK_PUSH_Y);
           this.breakGlassInReach(true);
-          hitCratesInReach(this, KICK_RANGE * PLAYER_SIZE_SCALE, KICK_DAMAGE, CRATE_KICK_PUSH_X, CRATE_KICK_PUSH_Y);
+        } else {
+          this.punching = true;
+          this.punchFrame = 0;
+          this.punchQueued = false;
+          this.punchHitPerformed = false;
         }
-      } else if (this.jumping) {
-        // JumpKick: queued from the air, executes once AirbornTimer >= 2.5
-        this.jumpKickQueued = true;
       }
     }
     if (
