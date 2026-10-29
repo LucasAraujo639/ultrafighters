@@ -1491,6 +1491,7 @@ test('crouching beside a crate takes cover: back flush, bullets hit the crate', 
   assert.equal(player.crouching, true);
   assert.equal(player.inCover, true, 'the crouch snapped his back to the crate');
   assert.equal(player.x + player.w, crate.x, 'flush against the crate face');
+  assert.equal(player.lastDirX, -1, 'back to the crate: he faces the open side');
 
   // a bullet from the crate's side stops at the crate: full cover
   const hpBefore = player.hp;

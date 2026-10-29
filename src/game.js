@@ -2349,6 +2349,8 @@
     if (this.crouching && this.crouchCrate) {
       this.snapToCover(this.crouchCrate, dir);
       this.inCover = true;
+      // back against the crate: face the open side (away from the cover)
+      this.lastDirX = (this.crouchCrate.x > this.x + this.w / 2) ? -1 : 1;
     }
 
     // ---------- Movement ----------
