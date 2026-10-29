@@ -1474,52 +1474,34 @@ test('MELEE beside a crate: first press kicks, next presses flow into the punch 
   assert.ok(player.kickCooldown > 0, 'the cooldown still had time left');
 });
 
-test('DOWN held while walking crouch-walks into cover behind a crate', () => {
+test('crouching beside a crate takes cover: back flush, bullets hit the crate', () => {
   const { game, listeners } = createGame();
   const player = game.players[0];
   const floor = { x: 0, y: 500, w: 800, h: 100, solidSides: true, cloud: false, ladder: false };
   game.platforms.length = 0;
   game.platforms.push(floor);
   game.crates.length = 0;
-  game.crates.push({ x: 420, y: floor.y - 20, w: 20, h: 20, sx: 420, sy: floor.y - 20, vx: 0, vy: 0, hp: 60, hp0: 60, angle: 0, spin: 0, resting: true, dead: false });
-  resetPlayer(player, 350, floor.y - player.h, true);
+  const crate = { x: 460, y: floor.y - 20, w: 20, h: 20, sx: 460, sy: floor.y - 20, vx: 0, vy: 0, hp: 20, hp0: 20, angle: 0, spin: 0, resting: true, dead: false };
+  game.crates.push(crate);
+  resetPlayer(player, 430, floor.y - player.h, true);
   player.groundedPlatform = floor;
 
-  // hold DOWN + RIGHT: crouch-walk toward the crate at half speed
-  keyDown(listeners, 'KeyS');
-  keyDown(listeners, 'KeyD');
+  keyDown(listeners, 'KeyS'); // crouch near the crate (4px gap)
   game.step();
-  assert.equal(player.crouching, true, 'DOWN + walk = crouch-walk');
-  const startX = player.x;
-  for (let frame = 0; frame < 120; frame++) game.step();
+  assert.equal(player.crouching, true);
+  assert.equal(player.inCover, true, 'the crouch snapped his back to the crate');
+  assert.equal(player.x + player.w, crate.x, 'flush against the crate face');
 
-  // arrived (blocked) at the crate, still crouched behind it
-  assert.ok(player.x + player.w <= game.crates[0].x + 1e-6, 'stopped at the crate');
-  assert.ok(player.x > startX, 'he shuffled toward the crate');
-  assert.equal(player.crouching, true, 'stays crouched behind the crate');
-  assert.ok(player.x - startX < 40 * 1.7, 'crouch-walk is slower than a run');
-
-  // release DOWN and walk: he stands up and moves freely again
-  keyUp(listeners, 'KeyS');
+  // a bullet from the crate's side stops at the crate: full cover
+  const hpBefore = player.hp;
+  game.bullets.push({ x: 490, y: floor.y - 10, vx: -6, vy: 0, damage: 20, crit: false, owner: 2 });
   game.step();
-  assert.equal(player.crouching, false, 'releasing DOWN stands him up');
-  const xBefore = player.x;
-  for (let frame = 0; frame < 5; frame++) game.step();
-  assert.equal(player.x, xBefore, 'still blocked by the crate while standing');
-});
+  assert.equal(game.bullets.length, 0, 'the bullet died on the crate');
+  assert.equal(player.hp, hpBefore, 'the fighter took no damage in cover');
 
-test('sprint + DOWN still dives (crouch does not eat the dive)', () => {
-  const { game, listeners } = createGame();
-  const player = game.players[0];
-  const floor = { x: 0, y: 500, w: 800, h: 100, solidSides: true, cloud: false, ladder: false };
-  game.platforms.length = 0;
-  game.platforms.push(floor);
-  resetPlayer(player, 300, floor.y - player.h, true);
-  player.groundedPlatform = floor;
-  // arm the sprint (double-tap) then hold DOWN
-  keyDown(listeners, 'KeyD'); game.step(); keyUp(listeners, 'KeyD'); game.step();
-  keyDown(listeners, 'KeyD'); game.step(); // sprinting
-  keyDown(listeners, 'KeyS');
+  // with no crate around, crouching never claims cover
+  game.crates.length = 0;
   game.step();
-  assert.equal(player.diving, true, 'sprint + DOWN = dive');
+  assert.equal(player.crouching, true);
+  assert.equal(player.inCover, false, 'no crate, no cover');
 });

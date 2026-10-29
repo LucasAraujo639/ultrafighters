@@ -803,7 +803,7 @@
     if (p.diving) return 'dive';
     if (p.falling) return 'fall';
     if (p.punching) return 'attack';
-    if (p.crouching) return 'crouch';
+    if (p.crouching) return (p.inCover && SPRITE_MAP['cover'] != null) ? 'cover' : 'crouch';
     if (p.aiming) return 'guard';
     if (p.kickFlash > 0) {
       if (!p.onGround || p.jumpKickPerformed || p.jumpKickQueued) return 'kickWithJump';
@@ -909,7 +909,6 @@
   // full dimension before building both the fixture and its visual box.
   var MAP_AREA = { x: 105, y: -81, width: GAME_WIDTH, height: GAME_HEIGHT };
   var TILE_COLLISION_PADDING = 0.5;
-  var CROUCH_WALK_FACTOR = 0.5; // crouch-walk: half the run speed toward cover
   var GROUND_SUPPORT_TOLERANCE = 1; // retain the engine's existing 1 px support probe
 
   function mapPointToCanvas(x, y) {
@@ -1275,6 +1274,7 @@
     this.knockedDown = false; // lying on the ground (recovered by animation)
     this.knockedDownFrame = 0;
     this.crouching = false; // Kneel: holding DOWN standing still (cover pose)
+    this.inCover = false; // crouched with the back flush against a crate
     this.rolling = false;
     this.rollFrame = 0;
     this.staggering = false;
@@ -1743,6 +1743,32 @@
     if (this.hp > 0) {
       this.grabbedPlayerNr = other.id;
       other.grabbedByPlayer(this);
+    }
+  };
+
+  // TakingCover (extracted): while crouched, find a ground-level crate within
+  // a couple of pixels and slide the fighter flush against it. inCover means
+  // the crate stands between him and whatever comes from that side.
+  Player.prototype.updateCrouchCover = function () {
+    this.inCover = false;
+    if (!this.crouching) return;
+    var myFeet = this.y + this.h;
+    for (var i = 0; i < crates.length; i++) {
+      var c = crates[i];
+      if (c.dead) continue;
+      if (Math.abs((c.y + c.h) - myFeet) > 6) continue; // cover is ground level
+      var gapRight = c.x - (this.x + this.w); // crate on my right
+      var gapLeft = this.x - (c.x + c.w); // crate on my left
+      if (gapRight >= -2 && gapRight <= 6) {
+        this.x = c.x - this.w; // back flush against the crate's left face
+        this.inCover = true;
+        return;
+      }
+      if (gapLeft >= -2 && gapLeft <= 6) {
+        this.x = c.x + c.w; // back flush against the crate's right face
+        this.inCover = true;
+        return;
+      }
     }
   };
 
@@ -2293,19 +2319,17 @@
       }
     }
 
-    // Crouch (Kneel): hold DOWN to take cover — standing still or shuffling
-    // toward cover (crouch-walk, half speed). Holding DOWN while SPRINTING
-    // stays a dive, and a DOWN tap while running stays a roll: those roll
-    // states cancel the crouch.
+    // Crouch (Kneel): hold DOWN while standing still to take cover; the
+    // fighter stays put (movement locked) and presents the crouch pose
     this.crouching = controllable && this.onGround && this.pressDownKey() &&
-      !this.sprinting && !this.aiming && !this.rolling && !this.diving &&
-      !this.climbing && this.hp > 0;
+      dir === 0 && !this.aiming && !this.rolling && !this.diving && !this.climbing && this.hp > 0;
+    // TakingCover (extracted): crouching beside a crate slides the fighter's
+    // back flush against it — bullets then hit the crate, not the fighter
+    this.updateCrouchCover();
 
     // ---------- Movement ----------
     if (this.crouching) {
-      // crouch-walk: half-speed shuffle; against a crate he just stays crouched
-      this.airVelocityX = dir * (PLAYER_RUN_SPEED * CROUCH_WALK_FACTOR);
-      if (dir !== 0) this.lastDirX = dir;
+      this.airVelocityX = 0;
     } else if (dir !== 0) {
       if (dir < 0) this._portalLocked = false;
       this.lastDirX = dir;
