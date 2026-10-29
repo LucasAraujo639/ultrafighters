@@ -1483,15 +1483,24 @@ test('crouching beside a crate takes cover: back flush, bullets hit the crate', 
   game.crates.length = 0;
   const crate = { x: 460, y: floor.y - 20, w: 20, h: 20, sx: 460, sy: floor.y - 20, vx: 0, vy: 0, hp: 20, hp0: 20, angle: 0, spin: 0, resting: true, dead: false };
   game.crates.push(crate);
-  resetPlayer(player, 430, floor.y - player.h, true);
+  // standing 4px from the crate: touching distance takes cover
+  resetPlayer(player, crate.x - player.w - 4, floor.y - player.h, true);
   player.groundedPlatform = floor;
-
-  keyDown(listeners, 'KeyS'); // crouch near the crate (4px gap)
-  for (let frame = 0; frame < 8; frame++) game.step(); // the slide takes a few steps
+  keyDown(listeners, 'KeyS');
+  for (let frame = 0; frame < 4; frame++) game.step();
   assert.equal(player.crouching, true);
   assert.equal(player.inCover, true, 'the crouch snapped his back to the crate');
   assert.equal(player.x + player.w, crate.x, 'flush against the crate face');
   assert.equal(player.lastDirX, -1, 'back to the crate: he faces the open side');
+
+  // from 20px away the crouch is just a crouch: no magnetizing
+  game.crates.pop();
+  game.crates.push({ x: 460, y: floor.y - 20, w: 20, h: 20, sx: 460, sy: floor.y - 20, vx: 0, vy: 0, hp: 20, hp0: 20, angle: 0, spin: 0, resting: true, dead: false });
+  resetPlayer(player, 420, floor.y - player.h, true);
+  player.groundedPlatform = floor;
+  for (let frame = 0; frame < 10; frame++) game.step();
+  assert.equal(player.crouching, true);
+  assert.equal(player.inCover, false, 'no magnetizing from a distance');
 
   // a bullet from the crate's side stops at the crate: full cover
   const hpBefore = player.hp;

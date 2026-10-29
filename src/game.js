@@ -1759,12 +1759,14 @@
       if (Math.abs((c.y + c.h) - myFeet) > 6) continue; // cover is ground level
       var gapR = c.x - (this.x + this.w); // crate ahead when moving right
       var gapL = this.x - (c.x + c.w); // crate ahead when moving left
+      // Magnetize only when ALREADY touching the crate (within 6 px); from
+      // farther away, pressing DOWN while running is a roll, not cover.
       var gap = -1;
-      if (dir > 0 && gapR >= -2 && gapR <= 24) gap = gapR;
-      else if (dir < 0 && gapL >= -2 && gapL <= 24) gap = gapL;
+      if (dir > 0 && gapR >= -2 && gapR <= 6) gap = gapR;
+      else if (dir < 0 && gapL >= -2 && gapL <= 6) gap = gapL;
       else if (dir === 0) {
-        if (gapR >= -2 && gapR <= 34) gap = gapR;
-        else if (gapL >= -2 && gapL <= 34) gap = gapL;
+        if (gapR >= -2 && gapR <= 6) gap = gapR;
+        else if (gapL >= -2 && gapL <= 6) gap = gapL;
       }
       if (gap >= 0 && gap < bestGap) { best = c; bestGap = gap; }
     }
