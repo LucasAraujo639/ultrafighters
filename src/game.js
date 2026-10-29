@@ -1259,16 +1259,17 @@
   };
 
   Player.prototype.meleeConnects = function (other) {
-    // Range is authored for the base body; the body is drawn at
-    // PLAYER_SIZE_SCALE, so the box scales too (no invisible extra reach).
+    // Extracted MeleeStrike sweep: the punch raycasts from the fighter's CENTER
+    // (MidPosX + dir * 4 .. MeleeWeaponRange, at MidPosY - 4) — this is why
+    // fully overlapped fighters still hit each other in the original.
     var reach = this.equipped.range[this.punchComboNr - 1] * PLAYER_SIZE_SCALE;
-    var hitBox = {
-      x: this.lastDirX > 0 ? this.x + this.w : this.x - reach,
-      y: this.y + 8 * PLAYER_SIZE_SCALE,
-      w: reach,
-      h: 20 * PLAYER_SIZE_SCALE
-    };
-    return rectsOverlap(hitBox, other.getBounds());
+    var cy = this.y + this.h / 2 - 4;
+    var b = other.getBounds();
+    for (var d = 4; d <= reach; d += 2) {
+      var sx = this.x + this.w / 2 + this.lastDirX * d;
+      if (sx > b.x && sx < b.x + b.w && cy > b.y && cy < b.y + b.h) return true;
+    }
+    return false;
   };
 
   // MeleeStrike trade (extracted): when BOTH fighters connect on the same
@@ -1743,13 +1744,11 @@
     other.airVelocityY = KICK_KNOCKBACK_Y;
     other.onGround = false;
     other.groundedPlatform = null;
-    other.damage(KICK_DAMAGE); // KickDamage: 4
+    other.damage(KICK_DAMAGE); // KickDamage == JumpKickDamage: 4
     other.hitFlash = 6;
-    if (Math.random() < 0.5) {
-      other.falling = true; // ragdoll fall; lands into Knockdowned
-    } else {
-      other.startStagger();
-    }
+    // Extracted BeingKicked: the victim ALWAYS goes down from the kick —
+    // knockback (4, -2) plus Fall() (the ragdoll lands into Knockdowned)
+    other.falling = true;
   };
 
   Player.prototype.breakGlassInReach = function (legsOnly) {

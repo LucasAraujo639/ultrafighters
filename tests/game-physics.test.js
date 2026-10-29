@@ -1277,3 +1277,41 @@ test('the kick key is gone: MELEE kicks crates and jump kicks in the air', () =>
   keyUp(listeners, 'KeyF');
   assert.equal(player.jumpKickQueued, true, 'airborne MELEE queues the jump kick');
 });
+
+test('fully overlapped fighters still punch each other (central raycast)', () => {
+  const { game } = createGame();
+  const [attacker, victim] = game.players;
+  const floor = { x: 0, y: 500, w: 800, h: 100, solidSides: true, cloud: false, ladder: false };
+  game.platforms.length = 0;
+  game.platforms.push(floor);
+
+  resetPlayer(attacker, 300, floor.y - attacker.h, true);
+  attacker.groundedPlatform = floor;
+  resetPlayer(victim, 300, floor.y - victim.h, true); // exact same spot
+  victim.groundedPlatform = floor;
+  attacker.lastDirX = 1;
+  attacker.punchComboNr = 1;
+
+  assert.equal(attacker.meleeConnects(victim), true, 'the punch reaches an overlapped body');
+  const hpBefore = victim.hp;
+  attacker.tryPunchHit(victim);
+  assert.ok(victim.hp < hpBefore, 'the punch landed on the overlapped fighter');
+});
+
+test('the jump kick always knocks its victim down', () => {
+  const { game } = createGame();
+  const [kicker, victim] = game.players;
+  const floor = { x: 0, y: 500, w: 800, h: 100, solidSides: true, cloud: false, ladder: false };
+  game.platforms.length = 0;
+  game.platforms.push(floor);
+
+  for (let i = 0; i < 10; i++) {
+    resetPlayer(kicker, 300, floor.y - kicker.h, true);
+    kicker.groundedPlatform = floor;
+    resetPlayer(victim, 310, floor.y - victim.h, true);
+    victim.groundedPlatform = floor;
+    kicker.lastDirX = 1;
+    kicker.tryKickHit(victim);
+    assert.equal(victim.falling, true, 'every jump kick sends the victim down');
+  }
+});
