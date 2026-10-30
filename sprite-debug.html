@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Weapon sprite debug</title>
+  <style>
+    body { margin: 12px; background: #222; color: #eee; font-family: monospace; }
+    .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 10px; }
+    .cell { background: #444; border: 1px solid #666; padding: 8px; text-align: center; }
+    .cell img { image-rendering: pixelated; max-width: 120px; background: repeating-conic-gradient(#555 0 25%, #666 0 50%) 0 0/12px 12px; }
+    .num { font-weight: bold; }
+  </style>
+</head>
+<body>
+  <h1>Weapon sprites (shapes/)</h1>
+  <div class="grid" id="g"></div>
+  <script>
+    const defs = { pistol: 213, magnum: 787, uzi: 892, rifle: 223, shotgun: 228, sniper: 233, bazooka: 252, flamethrower: 505, machete: 296, axe: 500, sword: 291, grenade: 278, molotov: 286, pills: 782, medkit: 777, slowmo: 882 };
+    const g = document.getElementById('g');
+    for (const name in defs) {
+      const cell = document.createElement('div');
+      cell.className = 'cell';
+      const img = document.createElement('img');
+      img.src = `superfighters/shapes/${defs[name]}.svg`;
+      const num = document.createElement('div');
+      num.className = 'num';
+      num.textContent = `${name} (${defs[name]})`;
+      cell.appendChild(img);
+      cell.appendChild(num);
+      g.appendChild(cell);
+    }
+  </script>
+</body>
+</html>

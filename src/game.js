@@ -811,28 +811,8 @@
       (function (shape, path) {
         var img = new Image();
         img.onload = function () {
-          // measure the opaque bounding box: the PNG canvas has padding
-          try {
-            var m = document.createElement('canvas');
-            m.width = img.width; m.height = img.height;
-            var mctx = m.getContext('2d');
-            mctx.drawImage(img, 0, 0);
-            var data = mctx.getImageData(0, 0, img.width, img.height).data;
-            var minX = img.width, minY = img.height, maxX = -1, maxY = -1;
-            for (var py = 0; py < img.height; py++) {
-              for (var px2 = 0; px2 < img.width; px2++) {
-                if (data[(py * img.width + px2) * 4 + 3] > 16) {
-                  if (px2 < minX) minX = px2;
-                  if (px2 > maxX) maxX = px2;
-                  if (py < minY) minY = py;
-                  if (py > maxY) maxY = py;
-                }
-              }
-            }
-            if (maxX >= minX && maxY >= minY) {
-              weaponSpriteImages[shape] = { img: img, sx: minX, sy: minY, sw: maxX - minX + 1, sh: maxY - minY + 1 };
-            }
-          } catch (e) { /* keep procedural fallback */ }
+          // the shape's own rect is already the weapon silhouette: keep it whole
+          weaponSpriteImages[shape] = { img: img, w: img.width, h: img.height };
         };
         img.src = 'superfighters/shapes/' + path;
       })(_wshape, weaponSpriteDefs[_wshape]);
@@ -3369,9 +3349,9 @@
     // the original pickup/hand width; procedural art is only a fallback.
     var ws = weaponSpriteImages[c.shape];
     if (ws) {
-      var target = WEAPON_SPRITE_WIDTH[c.shape] || Math.max(12, ws.sw * 0.4);
-      var wsc = target / ws.sw;
-      ctx.drawImage(ws.img, ws.sx, ws.sy, ws.sw, ws.sh, x, y, ws.sw * wsc, ws.sh * wsc);
+      var target = WEAPON_SPRITE_WIDTH[c.shape] || 16;
+      var wsc = target / ws.w;
+      ctx.drawImage(ws.img, x, y, ws.w * wsc, ws.h * wsc);
       return;
     }
     if (c.shape === 'pills') {
