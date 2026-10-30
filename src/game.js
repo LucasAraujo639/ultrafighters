@@ -3375,10 +3375,10 @@ this.updateBurst();
         drawWeaponShape(item.weapon, item.x - 6, item.y - 10);
         continue;
       }
-      // the weapon at its natural sprite size (correct as-is); the frame
+      // the weapon at 1.1x its natural sprite size; the frame
       // adapts TO the weapon with a fixed 4 px margin on every side
-      var tw = ws.w;
-      var th = ws.h;
+      var tw = ws.w * 1.1;
+      var th = ws.h * 1.1;
       var baseY = item.y + 2; // resting ON the floor line
       var cx = item.x;
       var pad = 4;
