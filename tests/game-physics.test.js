@@ -1528,3 +1528,27 @@ test('crouching beside a crate takes cover: back flush, bullets hit the crate', 
   assert.equal(player.inCover, true, 'even after the roll, S ends in cover');
   assert.ok(Math.abs(player.x + player.w - 400) < 1, 'flush against the crate face');
 });
+
+test('a fighter standing on a crate cannot kick it from on top', () => {
+  const { game, listeners } = createGame();
+  const player = game.players[0];
+  const floor = { x: 0, y: 500, w: 800, h: 100, solidSides: true, cloud: false, ladder: false };
+  game.platforms.length = 0;
+  game.platforms.push(floor);
+  game.crates.length = 0;
+  const crate = { x: 400, y: floor.y - 20, w: 20, h: 20, sx: 400, sy: floor.y - 20, vx: 0, vy: 0, hp: 60, hp0: 60, angle: 0, spin: 0, resting: true, dead: false };
+  game.crates.push(crate);
+  resetPlayer(player, 402, floor.y - player.h - 20, true); // feet on the crate top
+  player.groundedPlatform = null;
+  player.groundedCrate = crate;
+  for (let frame = 0; frame < 5; frame++) game.step();
+  const hpBefore = crate.hp;
+  const vxBefore = crate.vx;
+
+  // MELEE while standing on it: no kick target, punches start instead
+  keyDown(listeners, 'KeyF');
+  for (let frame = 0; frame < 12; frame++) game.step(); // punch swings
+  keyUp(listeners, 'KeyF');
+  assert.equal(crate.hp, hpBefore, 'the mounted crate took no kick damage');
+  assert.ok(Math.abs(crate.vx - vxBefore) < 1e-6, 'the mounted crate was not shoved');
+});

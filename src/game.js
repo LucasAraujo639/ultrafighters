@@ -733,14 +733,17 @@
 
   function hitCratesInReach(attacker, reach, damage, pushX, pushY) {
     var dir = attacker.lastDirX;
+    // Extracted KickHit sweep: vertical band from y-16 up to the feet — a
+    // crate under the feet (the one he stands on) is never in the sweep
     var hitBox = {
       x: dir > 0 ? attacker.x + attacker.w : attacker.x - reach,
-      y: attacker.y,
-      w: reach, h: attacker.h
+      y: attacker.y - 16 * PLAYER_SIZE_SCALE,
+      w: reach, h: 16 * PLAYER_SIZE_SCALE
     };
     for (var i = 0; i < crates.length; i++) {
       var c = crates[i];
       if (c.dead) continue;
+      if (c === attacker.groundedCrate) continue; // standing on it: no kick
       if (!rectsOverlap(hitBox, c)) continue;
       damageCrate(c, damage, dir * (pushX || 3), pushY || -2.5);
     }
@@ -2271,7 +2274,10 @@
         var kickTarget = null;
         for (var kci = 0; kci < crates.length; kci++) {
           var kc = crates[kci];
-          if (!kc.dead && rectsOverlap(kickBox, kc)) { kickTarget = kc; break; }
+          if (kc.dead) continue;
+          // extracted KickHit: standing on the object disqualifies it as a target
+          if (kc === this.groundedCrate) continue;
+          if (rectsOverlap(kickBox, kc)) { kickTarget = kc; break; }
         }
         if (kickTarget && !this.meleeConnects(other)) {
           this.kickCooldown = KICK_COOLDOWN;
