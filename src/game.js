@@ -3375,14 +3375,19 @@ this.updateBurst();
         drawWeaponShape(item.weapon, item.x - 6, item.y - 10);
         continue;
       }
-      var tw = (WEAPON_SPRITE_WIDTH[item.weapon.shape] || 14);
-      var th = tw * (ws.h / ws.w);
+      // the weapon at its natural sprite size (correct as-is); the frame
+      // adapts TO the weapon with a fixed 4 px margin on every side
+      var tw = ws.w;
+      var th = ws.h;
       var baseY = item.y + 2; // resting ON the floor line
       var cx = item.x;
-      // selection brackets frame (grey corners, like the original pickups)
-      var boxSide = Math.max(tw, th) + 8;
-      var bx = cx - boxSide / 2;
-      var by = baseY - boxSide;
+      var pad = 4;
+      var wx = cx - tw / 2;
+      var wy = baseY - th;
+      var bx = wx - pad;
+      var by = wy - pad;
+      var boxW = tw + pad * 2;
+      var boxH = th + pad * 2;
       ctx.strokeStyle = '#c0c8d0';
       ctx.lineWidth = 2;
       var L = 5;
@@ -3390,14 +3395,13 @@ this.updateBurst();
       // top-left
       ctx.moveTo(bx, by + L); ctx.lineTo(bx, by); ctx.lineTo(bx + L, by);
       // top-right
-      ctx.moveTo(bx + boxSide - L, by); ctx.lineTo(bx + boxSide, by); ctx.lineTo(bx + boxSide, by + L);
+      ctx.moveTo(bx + boxW - L, by); ctx.lineTo(bx + boxW, by); ctx.lineTo(bx + boxW, by + L);
       // bottom-right
-      ctx.moveTo(bx + boxSide, by + boxSide - L); ctx.lineTo(bx + boxSide, by + boxSide); ctx.lineTo(bx + boxSide - L, by + boxSide);
+      ctx.moveTo(bx + boxW, by + boxH - L); ctx.lineTo(bx + boxW, by + boxH); ctx.lineTo(bx + boxW - L, by + boxH);
       // bottom-left
-      ctx.moveTo(bx + L, by + boxSide); ctx.lineTo(bx, by + boxSide); ctx.lineTo(bx, by + boxSide - L);
+      ctx.moveTo(bx + L, by + boxH); ctx.lineTo(bx, by + boxH); ctx.lineTo(bx, by + boxH - L);
       ctx.stroke();
-      // the weapon centered vertically inside the frame, resting on the floor
-      ctx.drawImage(ws.img, cx - tw / 2, by + (boxSide - th) / 2, tw, th);
+      ctx.drawImage(ws.img, wx, wy, tw, th);
     }
   }
 
