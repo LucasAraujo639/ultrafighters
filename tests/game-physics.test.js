@@ -1663,3 +1663,27 @@ test('the molotov spreads fire that burns fighters and crates', () => {
   assert.ok(game.crates[0].hp < crateHp, 'the fire burns the crate');
   assert.ok(player.hp < 100, 'the fire hurts the fighter standing in it');
 });
+
+test('the aim stays pitched after firing and drops to idle after 3s', () => {
+  const { game } = createGame();
+  const player = game.players[0];
+  const floor = { x: 0, y: 500, w: 800, h: 100, solidSides: true, cloud: false, ladder: false };
+  game.platforms.length = 0;
+  game.platforms.push(floor);
+  game.crates.length = 0;
+  resetPlayer(player, 300, floor.y - player.h, true);
+  player.groundedPlatform = floor;
+  player.ranged = { gun: game.guns.pistol, ammo: 12 };
+  player.aiming = true; player.aimMode = 0; player.aimPitch = 45;
+
+  player.fireWeapon(); // sets the BackToIdle hold timer (180)
+  // right after the shot the aim keeps the pitch
+  for (let frame = 0; frame < 60; frame++) game.step();
+  assert.equal(player.aiming, true, 'the aim stance stays alive after firing');
+  assert.equal(player.aimPitch, 45, 'the pitch stays where it was fired');
+
+  // after the hold expires it drops back to the fighting idle (pitch 0)
+  for (let frame = 0; frame < 150; frame++) game.step();
+  assert.equal(player.aiming, false, 'a long idle drops back to fighting stance');
+  assert.equal(player.aimPitch, 0, 'the pitch resets to fight stance');
+});

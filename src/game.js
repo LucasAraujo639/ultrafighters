@@ -415,6 +415,10 @@
   var PUNCH_ANIM_FRAMES = Math.round(12 * ANIM_TICKS_TO_STEPS); // PUNCH anim ≈ 12 artifact frames per link
   var PUNCH_RANGE = 16;
   var KICK_COOLDOWN = Math.round(8 * ANIM_TICKS_TO_STEPS); // extracted KickingCooldown = 8 ticks
+  // BackToIdle (extracted RangedUp): after firing, the aim stance STAYS with
+  // the pitch where it was; only after AIM_HOLD_TIME without firing does the
+  // fighter drop back to the fighting idle (pitch reset).
+  var AIM_HOLD_TIME = 180; // 3 s at 60 Hz
   var KICK_RANGE = 20;
   var ROLL_ANIM_FRAMES = 16; // roll duration in frames
   var LYING_ANIM_FRAMES = 30; // knocked-down recovery length
@@ -1375,6 +1379,7 @@
     this.muzzleFlash = 0;
     this.burstQueue = 0; // remaining shots of the rifle/uzi burst
     this.burstTimer = 0;
+    this.aimHoldTimer = 0; // BackToIdle: aim stays alive this long after a shot
 
     // Attack state
     this.kickCooldown = 0;
@@ -1646,6 +1651,7 @@
     }
     this.weaponCooldown = gun.cooldown;
     this.muzzleFlash = 2;
+    this.aimHoldTimer = AIM_HOLD_TIME; // every shot keeps the aim alive
     var alpha = (this.aimPitch * Math.PI) / 180;
     var dir = this.lastDirX;
     this.spawnShot(gun, alpha, dir);
@@ -2269,7 +2275,17 @@
           this.aimPitch = 0;
         }
       }
-      this.updateBurst();
+              // BackToIdle tick: with the trigger released, the aim holds for
+        // AIM_HOLD_TIME, then drops back to the fighting idle (pitch 0)
+        if (!keys[this.binding.fire] && this.aimHoldTimer > 0) {
+          this.aimHoldTimer--;
+          if (this.aimHoldTimer <= 0) {
+            this.aiming = false;
+            this.aimPitch = 0;
+            this.aimPitchSpeed = 0;
+          }
+        }
+this.updateBurst();
       // Pitch: UP key sweeps up, DOWN sweeps down — the artifact's model:
       // the pitch change ACCELERATES 2 deg/frame^2 and freezes on release
       if (this.aimTurningAroundDelay()) {
@@ -2314,10 +2330,9 @@
     if (this.aiming && this.aimMode === 0 && consumeJustReleased(this.binding.fire)) {
       if (!this.aimTurningAroundDelay()) {
         this.fireWeapon();
-        // BackToIdleTimer: the aim stance returns to idle after the shot
-        this.aiming = false;
-        this.aimPitch = 0;
-        this.aimPitchSpeed = 0;
+        // BackToIdle: the aim STAYS with the pitch where it was; the hold
+        // timer (reset by every shot) drops it to idle only after 3 s idle
+        this.aimHoldTimer = AIM_HOLD_TIME;
       }
     }
     // THROW press: ThrowDown
