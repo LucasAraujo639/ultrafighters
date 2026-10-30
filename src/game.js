@@ -2269,15 +2269,16 @@
         var kickReach = KICK_RANGE * PLAYER_SIZE_SCALE;
         var kickBox = {
           x: this.lastDirX > 0 ? this.x + this.w : this.x - kickReach,
-          y: this.y,
-          w: kickReach, h: this.h
+          y: this.y - 16 * PLAYER_SIZE_SCALE,
+          w: kickReach, h: this.h + 16 * PLAYER_SIZE_SCALE + 2
         };
         var kickTarget = null;
         for (var kci = 0; kci < crates.length; kci++) {
           var kc = crates[kci];
           if (kc.dead) continue;
-          // extracted KickHit: standing on the object disqualifies it as a target
-          if (kc === this.groundedCrate) continue;
+          // Extracted KickHit disqualifies the object you stand on — EXCEPT the
+          // crouch stomp: crouched on top + MELEE kicks it to move the crate
+          if (kc === this.groundedCrate && !this.crouching) continue;
           if (rectsOverlap(kickBox, kc)) { kickTarget = kc; break; }
         }
         if (kickTarget && !this.meleeConnects(other)) {

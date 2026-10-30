@@ -1591,3 +1591,38 @@ test('a fighter standing ON the crate still never hits it', () => {
   keyUp(listeners, 'KeyF');
   assert.equal(crate.hp, 60, 'the mounted crate stays untouched');
 });
+
+test('crouched on top of a crate, MELEE stomps it to move it', () => {
+  const { game, listeners } = createGame();
+  const player = game.players[0];
+  const floor = { x: 0, y: 500, w: 800, h: 100, solidSides: true, cloud: false, ladder: false };
+  game.platforms.length = 0;
+  game.platforms.push(floor);
+  game.crates.length = 0;
+  const crate = { x: 400, y: floor.y - 20, w: 20, h: 20, sx: 400, sy: floor.y - 20, vx: 0, vy: 0, hp: 60, hp0: 60, angle: 0, spin: 0, resting: true, dead: false };
+  game.crates.push(crate);
+  resetPlayer(player, 402, floor.y - player.h - 20, true);
+  player.groundedPlatform = null;
+  player.groundedCrate = crate;
+  for (let frame = 0; frame < 5; frame++) game.step();
+
+  // crouch on top (hold S), then MELEE: the stomp kick moves the crate
+  keyDown(listeners, 'KeyS');
+  for (let frame = 0; frame < 3; frame++) game.step();
+  assert.equal(player.crouching, true, 'crouched on top of the crate');
+  keyDown(listeners, 'KeyF');
+  game.step();
+  keyUp(listeners, 'KeyF');
+  assert.ok(player.kickFlash > 0, 'MELEE crouched = stomp kick');
+  assert.ok(crate.hp < 60, 'the crate took the stomp damage');
+  assert.ok(crate.vx !== 0 || crate.x !== 400, 'the stomp shoved the crate');
+
+  // standing (not crouched) MELEE still refuses to kick it
+  keyUp(listeners, 'KeyS');
+  game.step();
+  keyDown(listeners, 'KeyF');
+  game.step();
+  keyUp(listeners, 'KeyF');
+  assert.equal(player.kickFlash, 0, 'standing MELEE does not kick it');
+  assert.equal(player.punching, true, 'it punches instead');
+});
