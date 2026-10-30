@@ -1620,9 +1620,10 @@ test('crouched on top of a crate, MELEE stomps it to move it', () => {
   // standing (not crouched) MELEE still refuses to kick it
   keyUp(listeners, 'KeyS');
   game.step();
+  const hpAfterStomp = crate.hp;
   keyDown(listeners, 'KeyF');
   game.step();
   keyUp(listeners, 'KeyF');
-  assert.equal(player.kickFlash, 0, 'standing MELEE does not kick it');
   assert.equal(player.punching, true, 'it punches instead');
+  assert.equal(crate.hp, hpAfterStomp, 'standing MELEE does not kick the crate');
 });
