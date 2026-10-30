@@ -3344,6 +3344,48 @@
   }
 
   // Weapon shape in the hand (local coords, held pointing right)
+  // Floor weapon pickups: the extracted sprite resting on the ground at 1.5x,
+  // framed by the original's grey selection brackets
+  function drawFloorWeaponItems() {
+    for (var wi = 0; wi < weaponItems.length; wi++) {
+      var item = weaponItems[wi];
+      if (item.taken) continue;
+      if (item.ttl && item.ttl <= 192) {
+        if (Math.floor(item.ttl / 8) % 2 === 0) continue;
+      }
+      var ws = weaponSpriteImages[item.weapon.shape];
+      var k = item.weapon.kind;
+      var isWeapon = k === 'melee' || k === 'gun' || k === 'throwable';
+      if (!ws) {
+        drawWeaponShape(item.weapon, item.x - 6, item.y - 10);
+        continue;
+      }
+      var tw = (WEAPON_SPRITE_WIDTH[item.weapon.shape] || 14) * 1.5;
+      var th = tw * (ws.h / ws.w);
+      var baseY = item.y + 2; // resting ON the floor line
+      var cx = item.x;
+      // selection brackets frame (grey corners, like the original pickups)
+      var boxSide = Math.max(tw, th) + 12;
+      var bx = cx - boxSide / 2;
+      var by = baseY - boxSide;
+      ctx.strokeStyle = '#c0c8d0';
+      ctx.lineWidth = 2;
+      var L = 5;
+      ctx.beginPath();
+      // top-left
+      ctx.moveTo(bx, by + L); ctx.lineTo(bx, by); ctx.lineTo(bx + L, by);
+      // top-right
+      ctx.moveTo(bx + boxSide - L, by); ctx.lineTo(bx + boxSide, by); ctx.lineTo(bx + boxSide, by + L);
+      // bottom-right
+      ctx.moveTo(bx + boxSide, by + boxSide - L); ctx.lineTo(bx + boxSide, by + boxSide); ctx.lineTo(bx + boxSide - L, by + boxSide);
+      // bottom-left
+      ctx.moveTo(bx + L, by + boxSide); ctx.lineTo(bx, by + boxSide); ctx.lineTo(bx, by + boxSide - L);
+      ctx.stroke();
+      // the weapon centered vertically inside the frame, resting on the floor
+      ctx.drawImage(ws.img, cx - tw / 2, by + (boxSide - th) / 2, tw, th);
+    }
+  }
+
   function drawWeaponShape(c, x, y) {
     // Extracted sprite (named DefineSprite PNG): the weapon as-is, scaled to
     // the original pickup/hand width; procedural art is only a fallback.
@@ -5192,14 +5234,8 @@
     for (var i = 0; i < platforms.length; i++) drawPlatform(platforms[i]);
     drawGlassShards();
     for (i = 0; i < hangingLamps.length; i++) drawHangingLamp(hangingLamps[i]);
-    for (var wi = 0; wi < weaponItems.length; wi++) {
-      var item = weaponItems[wi];
-      if (item.taken) continue;
-      if (item.ttl && item.ttl <= 192) {
-        if (Math.floor(item.ttl / 8) % 2 === 0) continue;
-      }
-      drawWeaponShape(item.weapon, item.x - 6, item.y - 10);
-    }
+    drawFloorWeaponItems();
+    
     drawBullets();
     drawGrenades();
     drawExplosions();
