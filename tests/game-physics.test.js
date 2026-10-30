@@ -1550,3 +1550,116 @@ test('the Slowmo pickup slows the whole game to half pace for its duration', () 
   assert.ok(minSpeed < 0.72 && minSpeed > 0.6, 'the hold eases to ~0.5 effective pace');
   assert.equal(game.gameSpeed, 1, 'the slow motion ramps back out to full speed');
 });
+
+test('weapons are grabbed with crouch + MELEE, never by walking over', () => {
+  const { game, listeners } = createGame();
+  const player = game.players[0];
+  const floor = { x: 0, y: 500, w: 800, h: 100, solidSides: true, cloud: false, ladder: false };
+  game.platforms.length = 0;
+  game.platforms.push(floor);
+  game.crates.length = 0;
+  resetPlayer(player, 400, floor.y - player.h, true);
+  player.groundedPlatform = floor;
+  game.weaponItems.length = 0;
+  game.weaponItems.push({ weapon: game.guns.uzi, x: player.x + 6, y: floor.y - 2, taken: false, pickupDelay: 0 });
+
+  // walking over does NOT grab it
+  keyDown(listeners, 'KeyD');
+  for (let frame = 0; frame < 5; frame++) game.step();
+  keyUp(listeners, 'KeyD');
+  game.step();
+  assert.equal(game.weaponItems[0].taken, false, 'walk-over never grabs a weapon');
+  assert.equal(player.ranged, null);
+
+  // crouch + MELEE grabs it
+  resetPlayer(player, 398, floor.y - player.h, true);
+  player.groundedPlatform = floor;
+  keyDown(listeners, 'KeyS');
+  game.step(); // crouch first
+  keyDown(listeners, 'KeyF');
+  game.step();
+  keyUp(listeners, 'KeyF');
+  const grabbed = game.weaponItems.length === 0 || game.weaponItems[0].taken === true;
+  assert.ok(grabbed, 'crouch + MELEE grabs the weapon');
+  assert.ok(player.ranged !== null, 'the uzi is equipped');
+  assert.equal(player.ranged.gun.name, 'Uzi');
+  keyUp(listeners, 'KeyS');
+});
+
+test('the uzi fires a 5-shot burst with extracted damage', () => {
+  const { game, listeners } = createGame();
+  const player = game.players[0];
+  const other = game.players[1];
+  const floor = { x: 0, y: 500, w: 800, h: 100, solidSides: true, cloud: false, ladder: false };
+  game.platforms.length = 0;
+  game.platforms.push(floor);
+  game.crates.length = 0;
+  resetPlayer(player, 300, floor.y - player.h, true);
+  player.groundedPlatform = floor;
+  resetPlayer(other, 100, floor.y - other.h, true); // out of the bullet path
+  other.groundedPlatform = floor;
+  player.ranged = { gun: game.guns.uzi, ammo: 25 };
+  player.lastDirX = 1;
+  player.aiming = true; player.aimMode = 0; player.aimPitch = 0;
+
+  player.fireWeapon();
+  assert.equal(game.bullets.length, 1, 'the first shot leaves the muzzle');
+  assert.equal(player.burstQueue, 4, '4 shots remain in the burst queue');
+  assert.ok(Math.abs(game.bullets[0].damage - 7) < 1e-6, 'uzi damage 7');
+  for (let frame = 0; frame < 18; frame++) game.step();
+  assert.equal(player.burstQueue, 0, 'the full 5-shot burst left the muzzle');
+  assert.equal(player.ranged.ammo, 20, 'the burst consumed 5 of 25 (extracted)');
+});
+
+test('the shotgun fires 4 pellets and the magnum crits hard', () => {
+  const { game } = createGame();
+  const player = game.players[0];
+  const floor = { x: 0, y: 500, w: 800, h: 100, solidSides: true, cloud: false, ladder: false };
+  game.platforms.length = 0;
+  game.platforms.push(floor);
+  game.crates.length = 0;
+  resetPlayer(player, 300, floor.y - player.h, true);
+  player.groundedPlatform = floor;
+  player.ranged = { gun: game.guns.shotgun, ammo: 32 };
+  player.aiming = true; player.aimMode = 0; player.aimPitch = 0;
+  player.fireWeapon();
+  assert.equal(game.bullets.length, 4, 'shotgun fires 4 pellets');
+  assert.ok(Math.abs(game.bullets[0].damage - 6) < 1e-6, 'shotgun pellet damage 6');
+});
+
+test('the bazooka rocket detonates a big blast on impact', () => {
+  const { game } = createGame();
+  const player = game.players[0];
+  const other = game.players[1];
+  const floor = { x: 0, y: 500, w: 800, h: 100, solidSides: true, cloud: false, ladder: false };
+  game.platforms.length = 0;
+  game.platforms.push(floor);
+  game.crates.length = 0;
+  resetPlayer(player, 300, floor.y - player.h, true);
+  player.groundedPlatform = floor;
+  resetPlayer(other, 500, floor.y - other.h, true);
+  other.groundedPlatform = floor;
+  const hpBefore = other.hp;
+  game.bullets.push({ x: 480, y: floor.y - 13, vx: 5, vy: 0, damage: 0, critDamage: 0, crit: false, owner: 1, trail: [], rocket: true });
+  for (let frame = 0; frame < 5; frame++) game.step();
+  assert.ok(other.hp < hpBefore, 'the blast hurt the fighter');
+  assert.ok(other.falling, 'the blast ragdolled him');
+});
+
+test('the molotov spreads fire that burns fighters and crates', () => {
+  const { game } = createGame();
+  const player = game.players[0];
+  const floor = { x: 0, y: 500, w: 800, h: 100, solidSides: true, cloud: false, ladder: false };
+  game.platforms.length = 0;
+  game.platforms.push(floor);
+  game.crates.length = 0;
+  game.crates.push({ x: 420, y: floor.y - 20, w: 20, h: 20, sx: 420, sy: floor.y - 20, vx: 0, vy: 0, hp: 60, hp0: 60, angle: 0, spin: 0, resting: true, dead: false });
+  resetPlayer(player, 425, floor.y - player.h, true);
+  player.groundedPlatform = floor;
+  const crateHp = game.crates[0].hp;
+  game.spawnFirePool(430, floor.y - 2);
+  for (let frame = 0; frame < 6; frame++) game.step();
+  assert.ok(game.flames.length > 0, 'the fire pool burns');
+  assert.ok(game.crates[0].hp < crateHp, 'the fire burns the crate');
+  assert.ok(player.hp < 100, 'the fire hurts the fighter standing in it');
+});

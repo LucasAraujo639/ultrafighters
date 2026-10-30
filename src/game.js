@@ -311,19 +311,16 @@
   var BULLET_SUBSTEP_PX = 4; // bullet substeps n = round(TotalVel / 4), min 1
   var AIM_SQUARE_DISTANCE = 8; // CalculateAimSquare's step budget (8 x 2px)
   var GUNS = {
-    pistol: {
-      kind: 'gun', name: 'Pistol', ammo: 8, speed: 20, damage: 10,
-      critChance: 5, critDamage: 15, pushback: 15, impulseForce: 0.6,
-      cooldown: 6, spread: 1, pellets: 1, shape: 'pistol',
-      laserSight: false
-    }
+    pistol:  { kind: 'gun', name: 'Pistol',  ammo: 12, cooldown: 15, spread: 1,   pellets: 1, burst: 1, burstInterval: 0,   speed: 30, damage: 10, critChance: 5,  critDamage: 15, pushback: 15, shape: 'pistol' },
+    rifle:   { kind: 'gun', name: 'Rifle',   ammo: 25, cooldown: 35, spread: 3,   pellets: 1, burst: 5, burstInterval: 5,   speed: 35, damage: 8,  critChance: 6,  critDamage: 10, pushback: 20, shape: 'rifle' },
+    uzi:     { kind: 'gun', name: 'Uzi',     ammo: 25, cooldown: 25, spread: 6,   pellets: 1, burst: 5, burstInterval: 2.5, speed: 30, damage: 7,  critChance: 4,  critDamage: 10, pushback: 10, shape: 'uzi' },
+    shotgun: { kind: 'gun', name: 'Shotgun', ammo: 32, cooldown: 40, spread: 4.3, pellets: 4, burst: 1, burstInterval: 0,   speed: 30, damage: 6,  critChance: 0,  critDamage: 6,  pushback: 33, shape: 'shotgun' },
+    magnum:  { kind: 'gun', name: 'Magnum',  ammo: 6,  cooldown: 20, spread: 0.5, pellets: 1, burst: 1, burstInterval: 0,   speed: 40, damage: 25, critChance: 40, critDamage: 35, pushback: 50, shape: 'magnum' },
+    sniper:  { kind: 'gun', name: 'Sniper',  ammo: 5,  cooldown: 45, spread: 0,   pellets: 1, burst: 1, burstInterval: 0,   speed: 40, damage: 30, critChance: 75, critDamage: 60, pushback: 50, shape: 'sniper' },
+    bazooka: { kind: 'gun', name: 'Bazooka', ammo: 3,  cooldown: 25, spread: 2,   pellets: 1, burst: 1, burstInterval: 0,   speed: 18, damage: 0,  critChance: 0,  critDamage: 0,  pushback: 0,  shape: 'bazooka', rocket: true },
+    flamethrower: { kind: 'gun', name: 'Flamethrower', ammo: 60, cooldown: 2, spread: 6, pellets: 1, burst: 1, burstInterval: 0, speed: 10, damage: 4, critChance: 0, critDamage: 0, pushback: 2, shape: 'flamethrower', flame: true }
   };
-  GUNS.sniper = {
-    kind: 'gun', name: 'Sniper', ammo: 4, speed: 40, damage: 30,
-    critChance: 75, critDamage: 60, pushback: 50, impulseForce: 1.25,
-    cooldown: 18, spread: 0, pellets: 1, shape: 'pistol',
-    laserSight: true // the ONLY LaserSight weapon in the build
-  };
+  GUNS.pistol.kind = 'gun';
   var GRENADE = {
     name: 'Grenade', throwSpeed: 5.5, upBias: -2, throwTimer: 72, ammo: 3,
     radius: 90, damageMax: 30, damageMin: 5, shape: 'grenade'
@@ -338,6 +335,7 @@
   // with a 1-second ramp back out.
   var SLOWMO_ITEM_TARGET = 0.5 / 0.75; // factor over base pace: effective 0.5
   var SLOWMO_ITEM_RAMP = 24 * ANIM_TICKS_TO_STEPS; // 1 s ramp (extracted 24 ticks)
+  var MOLOTOV = { kind: 'throwable', name: 'Molotov', throwSpeed: 5.5, upBias: -2, throwTimer: 72, ammo: 3, shape: 'molotov', fire: true };
   var SLOWMO_05 = { kind: 'powerup', power: 'slowmo', name: 'Slowmo 0.5', time: 5, shape: 'slowmo' };
   var SLOWMO_10 = { kind: 'powerup', power: 'slowmo', name: 'Slowmo 1.0', time: 10, shape: 'slowmo' };
   // Health pickups (extracted WeaponPowerupData): Ammo IS the heal amount,
@@ -765,7 +763,8 @@
   // Phase 5 entities
   var bullets = []; // { x, y, vx, vy, damage, crit, owner, trail[] }
   var weaponRespawnTimer = 300;
-  var grenades = []; // { x, y, vx, vy, fuse, spin }
+  var grenades = []; // { x, y, vx, vy, fuse, spin, type: 'grenade'|'molotov' }
+  var flames = []; // { x, y, vx, vy, life, damage, owner, hit } — fire props
   var explosions = []; // { x, y, radius, frame }
   var glassShards = []; // { x, y, vx, vy, angle, spin, size, life }
 
@@ -1335,6 +1334,8 @@
     this.startAimASAP = false; // _startAimASAP
     this.weaponCooldown = 0; // CurrentWeaponCooldown
     this.muzzleFlash = 0;
+    this.burstQueue = 0; // remaining shots of the rifle/uzi burst
+    this.burstTimer = 0;
 
     // Attack state
     this.kickCooldown = 0;
@@ -1562,9 +1563,42 @@
     this.aimPitch = 0;
   };
 
+  // One shot of the weapon's ammo (single bullet or one flame puff)
+  Player.prototype.spawnShot = function (gun, alpha, dir) {
+    var muzzleX = dir > 0 ? this.x + this.w + 6 : this.x - 6;
+    var muzzleY = this.y + 16;
+    for (var i = 0; i < gun.pellets; i++) {
+      var deflection = ((Math.random() * 2 - 1) * gun.spread * Math.PI) / 180;
+      var speed = gun.speed * TIME_SCALE;
+      var a = alpha + deflection;
+      if (gun.flame) {
+        // FLAME (extracted): short-lived fire puffs along the aim, no bullet
+        flames.push({
+          x: muzzleX, y: muzzleY,
+          vx: Math.cos(a) * speed * dir + (Math.random() * 2 - 1),
+          vy: Math.sin(a) * speed - Math.random() * 0.6,
+          life: 26 + Math.random() * 10, damage: gun.damage,
+          owner: this.id, hit: {}, size: 4 + Math.random() * 3
+        });
+      } else {
+        bullets.push({
+          x: muzzleX, y: muzzleY,
+          vx: Math.cos(a) * speed * dir,
+          vy: Math.sin(a) * speed,
+          damage: gun.damage,
+          critDamage: gun.critDamage,
+          crit: Math.random() * 100 < gun.critChance,
+          owner: this.id,
+          trail: [],
+          rocket: !!gun.rocket
+        });
+      }
+    }
+  };
+
   Player.prototype.fireWeapon = function () {
-    // FireWeapon: cooldown gate; empty -> the gun is tossed forward (AbortAiming
-    // drop with Ammo <= 0); else cooldown + bullets + ammo--
+    // FireWeapon: cooldown gate; empty -> the gun is tossed forward; burst
+    // weapons (rifle/uzi: extracted FireSequence of 5 shots) queue the rest
     if (this.weaponCooldown > 0 || !this.ranged) return;
     var gun = this.ranged.gun;
     if (this.ranged.ammo <= 0) {
@@ -1575,26 +1609,44 @@
     this.muzzleFlash = 2;
     var alpha = (this.aimPitch * Math.PI) / 180;
     var dir = this.lastDirX;
-    var muzzleX = dir > 0 ? this.x + this.w + 6 : this.x - 6;
-    var muzzleY = this.y + 16;
-    for (var i = 0; i < gun.pellets; i++) {
-      var deflection = ((Math.random() * 2 - 1) * gun.spread * Math.PI) / 180;
-      var speed = gun.speed * TIME_SCALE;
-      bullets.push({
-        x: muzzleX,
-        y: muzzleY,
-        vx: Math.cos(alpha + deflection) * speed * dir,
-        vy: Math.sin(alpha + deflection) * speed,
-        damage: gun.damage,
-        critDamage: gun.critDamage,
-        crit: Math.random() * 100 < gun.critChance,
-        owner: this.id,
-        trail: []
-      });
-    }
+    this.spawnShot(gun, alpha, dir);
     this.ranged.ammo--;
+    if (gun.burst > 1) {
+      this.burstQueue = gun.burst - 1;
+      this.burstTimer = gun.burstInterval;
+    }
     if (this.ranged.ammo <= 0) {
       // Empty gun is tossed forward and disappears (Superfighters behavior)
+      this.dropGunItem(false);
+      this.aiming = false;
+      this.aimPitch = 0;
+      this.aimPitchSpeed = 0;
+    }
+  };
+
+  function weaponItemNearby(p) {
+    for (var i = 0; i < weaponItems.length; i++) {
+      var it = weaponItems[i];
+      if (it.taken || it.pickupDelay > 0) continue;
+      var k = it.weapon.kind;
+      if (k !== 'melee' && k !== 'gun' && k !== 'throwable') continue;
+      if (rectsOverlap(p.getBounds(), { x: it.x - 8, y: it.y - 12, w: 16, h: 16 })) return it;
+    }
+    return null;
+  }
+
+  // Burst continuation (rifle/uzi FireSequence): one queued shot per interval
+  Player.prototype.updateBurst = function () {
+    if (this.burstQueue <= 0 || !this.ranged) return;
+    this.burstTimer--;
+    if (this.burstTimer > 0) return;
+    this.burstTimer = this.ranged.gun.burstInterval;
+    this.burstQueue--;
+    this.ranged.ammo--;
+    this.muzzleFlash = 2;
+    var alpha = (this.aimPitch * Math.PI) / 180;
+    this.spawnShot(this.ranged.gun, alpha, this.lastDirX);
+    if (this.ranged.ammo <= 0) {
       this.dropGunItem(false);
       this.aiming = false;
       this.aimPitch = 0;
@@ -1611,6 +1663,7 @@
     var alpha = (this.aimPitch * Math.PI) / 180;
     var dir = this.lastDirX;
     grenades.push({
+      type: this.throwable.type || 'grenade',
       x: this.x + this.w / 2 - 4.5 * dir,
       y: this.y + this.h / 2 - 7.5,
       vx: GRENADE.throwSpeed * Math.cos(alpha) * dir,
@@ -2052,6 +2105,8 @@
     //   double-tap window (ShortDiveTimer > 0) + DOWN -> short dive (speed 1)
     // NOT while aiming: the aiming stance owns the DOWN key (pitch sweep)
     if (this.shortDiveTimer > 0) this.shortDiveTimer--;
+    // (extracted: the roll/dive needs a DIRECTION held — standing DOWN is a
+    // plain kneel, which is what lets you grab weapons with crouch + MELEE)
     if (
       controllable &&
       !this.aiming &&
@@ -2060,7 +2115,8 @@
       !this.rolling &&
       !this.diving &&
       !this.onLadder() &&
-      !this.crouchCrate
+      !this.crouchCrate &&
+      dir !== 0
     ) {
       if (this.sprinting) {
         this.drainEnergy(SPRINT_DIVE_COST);
@@ -2161,6 +2217,20 @@
       // Turn-around first: flipping resets the pitch and blocks firing
       if (this.pressLeft() && this.lastDirX === 1) this.turnAround(-1);
       else if (this.pressRight() && this.lastDirX === -1) this.turnAround(1);
+      // FLAMETHROWER: while aiming with FIRE held, spit fire puffs (the
+      // extracted FireSequence fires every step while the trigger holds)
+      if (this.ranged && this.ranged.gun.flame && keys[this.binding.fire] &&
+          this.aimMode === 0 && this.weaponCooldown <= 0 && this.ranged.ammo > 0) {
+        this.weaponCooldown = 2;
+        this.ranged.ammo--;
+        this.spawnShot(this.ranged.gun, (this.aimPitch * Math.PI) / 180, this.lastDirX);
+        if (this.ranged.ammo <= 0) {
+          this.dropGunItem(false);
+          this.aiming = false;
+          this.aimPitch = 0;
+        }
+      }
+      this.updateBurst();
       // Pitch: UP key sweeps up, DOWN sweeps down — the artifact's model:
       // the pitch change ACCELERATES 2 deg/frame^2 and freezes on release
       if (this.aimTurningAroundDelay()) {
@@ -2290,7 +2360,11 @@
           var kc = crates[kci];
           if (!kc.dead && rectsOverlap(kickBox, kc)) { kickTarget = kc; break; }
         }
-        if (kickTarget && !this.meleeConnects(other)) {
+        var grabTarget = this.pressDownKey() && weaponItemNearby(this);
+        if (grabTarget) {
+          // extracted Melee(): CanGrabWeapon && KneelPressed -> GrabWeapon()
+          // returns without starting a punch — the pickup pass swaps the slot
+        } else if (kickTarget && !this.meleeConnects(other)) {
           this.kickCooldown = KICK_COOLDOWN;
           this.kickFlash = KICK_COOLDOWN;
           damageCrate(kickTarget, KICK_DAMAGE, this.lastDirX * CRATE_KICK_PUSH_X, CRATE_KICK_PUSH_Y);
@@ -2841,7 +2915,14 @@
     // ranged, throwable; picking up over an occupied slot drops the old weapon.
     // NOTE: the loop iterates a SNAPSHOT length — dropping inside the loop must
     // not feed itself. Fresh drops carry pickupDelay (grace before re-grab).
-    if (controllable && !this.aiming) {
+    // Weapons: extracted CanGrabWeapon — walk-over only picks HEALTH and
+    // POWERUPS. Weapons need Kneel (crouch) + MELEE, like the original's
+    // Melee() -> CanGrabWeapon && KneelPressed -> GrabWeapon().
+    var grabMode = false;
+    if (meleePressed && this.pressDownKey()) {
+      grabMode = true; // weapons get grabbed this press
+    }
+    if ((controllable && !this.aiming) || grabMode) {
       var itemCount = weaponItems.length; // snapshot: pushes land next frame
       for (var wi = 0; wi < itemCount; wi++) {
         var item = weaponItems[wi];
@@ -2850,6 +2931,8 @@
           x: item.x - 8, y: item.y - 12, w: 16, h: 16
         })) continue;
         var kind = item.weapon.kind;
+        var isWeapon = kind === 'melee' || kind === 'gun' || kind === 'throwable';
+        if (isWeapon && !grabMode) continue; // weapons need crouch + MELEE
         if (kind === 'melee') {
           if (this.equipped !== MELEE_WEAPONS.fists) {
             weaponItems.push({ weapon: this.equipped, x: this.x + this.w / 2, y: this.y + this.h, taken: false, pickupDelay: 30 });
@@ -2866,9 +2949,9 @@
           item.taken = true;
         } else if (kind === 'throwable') {
           if (this.throwable && this.throwable.ammo > 0) {
-            weaponItems.push({ weapon: GRENADE, x: this.x + this.w / 2, y: this.y + this.h, taken: false, pickupDelay: 30 });
+            weaponItems.push({ weapon: this.throwable.type === 'molotov' ? MOLOTOV : GRENADE, x: this.x + this.w / 2, y: this.y + this.h, taken: false, pickupDelay: 30 });
           }
-          this.throwable = { ammo: item.weapon.ammo };
+          this.throwable = { ammo: item.weapon.ammo, type: item.weapon.fire ? 'molotov' : 'grenade' };
           item.taken = true;
         } else if (kind === 'powerup') {
           // Slowmo powerup (extracted): walk over it and it activates globally
@@ -3240,6 +3323,47 @@
       px(x, y - 1, 12, 8, '#e8e4da'); // kit box
       px(x + 5, y + 1, 2, 4, '#d0453a'); // cross vertical
       px(x + 3, y + 2, 6, 2, '#d0453a'); // cross horizontal
+    } else if (c.shape === 'pistol') {
+      px(x + 2, y + 2, 7, 3, '#2e2e34'); // slide
+      px(x + 3, y + 5, 3, 4, '#2e2e34'); // grip
+      px(x + 2, y + 2, 7, 1, '#4a4a52');
+    } else if (c.shape === 'magnum') {
+      px(x + 1, y + 2, 9, 3, '#8a8f96'); // barrel + frame
+      px(x + 4, y + 4, 2, 3, '#5d6167'); // grip
+      px(x + 5, y + 2, 3, 3, '#6b7078'); // cylinder
+    } else if (c.shape === 'uzi') {
+      px(x, y + 2, 12, 3, '#2e2e34'); // receiver
+      px(x + 4, y + 5, 3, 5, '#2e2e34'); // magazine
+      px(x + 9, y + 5, 2, 3, '#3a3a42'); // grip
+    } else if (c.shape === 'rifle') {
+      px(x, y + 3, 16, 2, '#5a3a24'); // wood body
+      px(x + 6, y + 1, 6, 2, '#3a3a42'); // receiver
+      px(x + 14, y + 2, 4, 3, '#3a3a42'); // muzzle
+      px(x + 4, y + 5, 3, 2, '#5a3a24'); // mag
+    } else if (c.shape === 'shotgun') {
+      px(x, y + 2, 16, 2, '#4a3820'); // barrel pair
+      px(x, y + 4, 14, 2, '#3a2c18');
+      px(x + 4, y + 6, 4, 2, '#6b4f2e'); // grip
+    } else if (c.shape === 'sniper') {
+      px(x, y + 3, 18, 2, '#3a3a42'); // body
+      px(x + 5, y, 5, 2, '#1c1c22'); // scope
+      px(x + 15, y + 2, 4, 3, '#2e2e34'); // muzzle
+    } else if (c.shape === 'bazooka') {
+      px(x, y + 2, 18, 4, '#2e5c4a'); // tube
+      px(x, y + 1, 3, 2, '#1c3c30'); // muzzle
+      px(x + 13, y + 5, 3, 2, '#2e5c4a'); // grip
+    } else if (c.shape === 'flamethrower') {
+      px(x, y + 2, 14, 4, '#8a2e22'); // tank + tube
+      px(x + 12, y + 1, 5, 2, '#5d6167'); // nozzle
+      px(x + 2, y + 5, 3, 2, '#5d6167'); // valve
+    } else if (c.shape === 'molotov') {
+      px(x + 3, y, 6, 8, '#b07030'); // bottle
+      px(x + 5, y - 2, 2, 3, '#8a5a24'); // neck + rag
+      px(x + 3, y + 3, 6, 2, '#d8a040'); // liquid line
+    } else if (c.shape === 'grenade') {
+      px(x + 2, y + 1, 7, 7, '#3f5a3f');
+      px(x + 4, y - 1, 3, 2, '#2a3f2a');
+      px(x + 2, y + 4, 7, 2, '#2a3f2a');
     } else if (c.shape === 'machete') {
       px(x, y, 3, 4, '#3a3a3a'); // grip
       px(x + 3, y - 1, 9, 3, '#c8ccd2'); // blade
@@ -3480,6 +3604,10 @@
       ctx.scale(-1, 1);
     }
     drawFighterPose(p);
+    // gun in hand while aiming (original aim stances hold the weapon visible)
+    if (p.ranged) {
+      drawWeaponShape(p.ranged.gun, p.baseW / 2 + 2, p.baseH / 2 - 6);
+    }
     ctx.restore();
 
     // Sprint motion streak
@@ -3690,7 +3818,30 @@
           if (pointInPlatform(b.x, b.y, plat)) {
             // SOLID_GLASS_01 is transparent to nothing: a bullet shatters it.
             if (plat.glass) breakGlassPane(plat);
+            if (b.rocket) explodeRocket(b.x, b.y); // BAZOOKA_ROCKET detonates
             dead = true;
+            break;
+          }
+        }
+        if (dead) break;
+        // rockets detonate on fighters too
+        var rt = [player1, player2];
+        for (var rit = 0; rit < rt.length; rit++) {
+          var rp = rt[rit];
+          if (b.rocket && rp.id !== b.owner && rectsOverlap(rp.getBounds(), { x: b.x - 3, y: b.y - 3, w: 6, h: 6 })) {
+            explodeRocket(b.x, b.y);
+            dead = true;
+            break;
+          }
+        }
+        if (dead) break;
+        for (var rci = 0; rci < crates.length; rci++) {
+          var rc = crates[rci];
+          if (rc.dead) continue;
+          if (b.x > rc.x && b.x < rc.x + rc.w && b.y > rc.y && b.y < rc.y + rc.h) {
+            if (b.rocket) explodeRocket(b.x, b.y);
+            else damageCrate(rc, b.damage, 0, 0);
+            dead = true; // the crate eats the bullet
             break;
           }
         }
@@ -3730,9 +3881,9 @@
     }
   }
 
-  function explodeGrenade(x, y) {
-    explosions.push({ x: x, y: y, radius: GRENADE.radius, frame: 0 });
-    breakGlassInRadius(x, y, GRENADE.radius); // AffectedByExplosions
+  function explodeAt(x, y, radius, damageMax, damageMin) {
+    explosions.push({ x: x, y: y, radius: radius, frame: 0 });
+    breakGlassInRadius(x, y, radius); // AffectedByExplosions
     // AffectedByExplosions: crates take blast damage and fly with it
     for (var ci = 0; ci < crates.length; ci++) {
       var c = crates[ci];
@@ -3740,9 +3891,9 @@
       var cdx = c.x + c.w / 2 - x;
       var cdy = c.y + c.h / 2 - y;
       var cdist = Math.sqrt(cdx * cdx + cdy * cdy);
-      if (cdist > GRENADE.radius) continue;
-      var cfalloff = 1 - cdist / GRENADE.radius;
-      damageCrate(c, GRENADE.damageMax * cfalloff, (cdx >= 0 ? 1 : -1) * 7 * cfalloff, -5 * cfalloff);
+      if (cdist > radius) continue;
+      var cfalloff = 1 - cdist / radius;
+      damageCrate(c, damageMax * cfalloff, (cdx >= 0 ? 1 : -1) * 7 * cfalloff, -5 * cfalloff);
     }
     var targets = [player1, player2];
     for (var t = 0; t < targets.length; t++) {
@@ -3750,9 +3901,9 @@
       var dx = p.x + p.w / 2 - x;
       var dy = p.y + p.h / 2 - y;
       var dist = Math.sqrt(dx * dx + dy * dy);
-      if (dist > GRENADE.radius) continue;
-      var falloff = 1 - dist / GRENADE.radius;
-      p.damage(GRENADE.damageMin + (GRENADE.damageMax - GRENADE.damageMin) * falloff);
+      if (dist > radius) continue;
+      var falloff = 1 - dist / radius;
+      p.damage(damageMin + (damageMax - damageMin) * falloff);
       p.hitFlash = 6;
       var kb = 6 * VEL_SCALE * falloff;
       p.airVelocityX = (dx >= 0 ? 1 : -1) * kb;
@@ -3764,12 +3915,22 @@
     }
   }
 
+  function explodeGrenade(x, y) {
+    explodeAt(x, y, GRENADE.radius, GRENADE.damageMax, GRENADE.damageMin);
+  }
+
+  function explodeRocket(x, y) {
+    // BAZOOKA_ROCKET: Damage 100 on detonation (ProjectileData), big blast
+    explodeAt(x, y, 110, 100, 30);
+  }
+
   function updateGrenades() {
     for (var i = grenades.length - 1; i >= 0; i--) {
       var g = grenades[i];
       g.fuse--;
       if (g.fuse <= 0) {
-        explodeGrenade(g.x, g.y);
+        if (g.type === 'molotov') spawnFirePool(g.x, g.y);
+        else explodeGrenade(g.x, g.y);
         grenades.splice(i, 1);
         continue;
       }
@@ -3858,6 +4019,59 @@
     }
   }
 
+  function updateFlames() {
+    for (var i = flames.length - 1; i >= 0; i--) {
+      var f = flames[i];
+      f.life--;
+      if (f.life <= 0) { flames.splice(i, 1); continue; }
+      f.x += f.vx;
+      f.y += f.vy;
+      f.vy -= 0.03; // flames drift upward
+      var targets = [player1, player2];
+      for (var t = 0; t < targets.length; t++) {
+        var p = targets[t];
+        if (p.hp <= 0 || f.hit[p.id]) continue;
+        if (rectsOverlap(p.getBounds(), { x: f.x - f.size / 2, y: f.y - f.size / 2, w: f.size, h: f.size })) {
+          f.hit[p.id] = true;
+          p.damage(f.damage);
+          p.hitFlash = 6;
+          if (p.aiming) p.abortAiming(true);
+        }
+      }
+      // fire burns crates (CanBurn, extracted)
+      for (var ci = 0; ci < crates.length; ci++) {
+        var c = crates[ci];
+        if (c.dead) continue;
+        if (rectsOverlap(c, { x: f.x - f.size / 2, y: f.y - f.size / 2, w: f.size, h: f.size })) {
+          damageCrate(c, 2, 0, 0);
+          break;
+        }
+      }
+    }
+  }
+
+  function drawFlames() {
+    for (var i = 0; i < flames.length; i++) {
+      var f = flames[i];
+      var heat = Math.min(1, f.life / 20);
+      ctx.fillStyle = 'rgba(255,' + Math.floor(120 + 100 * heat) + ',40,' + (0.55 + 0.35 * heat) + ')';
+      ctx.beginPath();
+      ctx.arc(f.x, f.y, f.size * (0.6 + 0.4 * heat), 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+
+  // Molotov blast: fire spreads along the floor (no explosion radius)
+  function spawnFirePool(x, y) {
+    for (var i = 0; i < 6; i++) {
+      flames.push({
+        x: x + (i - 2.5) * 10 + Math.random() * 4, y: y - 4,
+        vx: 0, vy: 0, life: 90 + Math.random() * 40,
+        damage: 4, owner: -1, hit: {}, size: 6
+      });
+    }
+  }
+
   function updateGlassShards() {
     for (var i = glassShards.length - 1; i >= 0; i--) {
       var s = glassShards[i];
@@ -3921,7 +4135,7 @@
     weaponRespawnTimer--;
     if (weaponRespawnTimer <= 0) {
       weaponRespawnTimer = 300 + Math.floor(Math.random() * 180);
-      var catalog = [MELEE_WEAPONS.machete, MELEE_WEAPONS.axe, MELEE_WEAPONS.sword, GUNS.pistol, HEALTH_PILLS, HEALTH_MEDKIT, SLOWMO_05, SLOWMO_10];
+      var catalog = [MELEE_WEAPONS.machete, MELEE_WEAPONS.axe, MELEE_WEAPONS.sword, GUNS.pistol, GUNS.rifle, GUNS.uzi, GUNS.shotgun, GUNS.magnum, GUNS.sniper, GUNS.bazooka, GUNS.flamethrower, GRENADE, MOLOTOV, HEALTH_PILLS, HEALTH_MEDKIT, SLOWMO_05, SLOWMO_10];
       var wp = weaponSpawnPoints[Math.floor(Math.random() * weaponSpawnPoints.length)];
       weaponItems.push({
         weapon: catalog[Math.floor(Math.random() * catalog.length)],
@@ -4081,7 +4295,7 @@
 
   function populateWeaponSpawns() {
     // The level's 6 weapon spawn points get a random catalog weapon
-    var catalog = [MELEE_WEAPONS.machete, MELEE_WEAPONS.axe, MELEE_WEAPONS.sword, GUNS.pistol, HEALTH_PILLS, HEALTH_MEDKIT, SLOWMO_05, SLOWMO_10];
+    var catalog = [MELEE_WEAPONS.machete, MELEE_WEAPONS.axe, MELEE_WEAPONS.sword, GUNS.pistol, GUNS.rifle, GUNS.uzi, GUNS.shotgun, GUNS.magnum, GUNS.sniper, GUNS.bazooka, GUNS.flamethrower, GRENADE, MOLOTOV, HEALTH_PILLS, HEALTH_MEDKIT, SLOWMO_05, SLOWMO_10];
     weaponItems.length = 0;
     for (var i = 0; i < weaponSpawnPoints.length; i++) {
       var wp = weaponSpawnPoints[i];
@@ -4526,6 +4740,7 @@
     updateGrenades();
     updateExplosions();
     updateGlassShards();
+    updateFlames();
     updateWeaponItems();
     updateCrates();
 
@@ -4940,6 +5155,7 @@
     drawBullets();
     drawGrenades();
     drawExplosions();
+    drawFlames();
     drawCrates();
     drawPlayer(player1);
     drawPlayer(player2);
@@ -4989,6 +5205,8 @@
     explodeGrenade: explodeGrenade,
     damageCrate: damageCrate,
     startItemSlowmo: startItemSlowmo,
+    spawnFirePool: spawnFirePool,
+    flames: flames,
     step: updateStep,
     render: render
   };
