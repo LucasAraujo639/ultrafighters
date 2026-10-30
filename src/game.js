@@ -646,12 +646,14 @@
             grounded = true;
             o.vx += c.vx * 0.25; // weight transfer
           } else if (Math.abs(c.vx) > Math.abs(o.vx) + 0.01 && c.y + c.h > o.y + 2) {
-            // ramming another crate sideways: transfer momentum and stop
+            // ramming another crate sideways: positional drag only — the moved
+            // crate pushes the neighbor along, it never receives the hit's
+            // impulse (no "long-range" kick through the stack)
             var cxEdge = (c.vx > 0) ? o.x - c.w : o.x + o.w;
             if ((c.vx > 0 && c.x > cxEdge) || (c.vx < 0 && c.x < cxEdge)) {
               c.x = cxEdge;
-              o.vx += c.vx * 0.5;
-              c.vx *= 0.5;
+              o.x += c.vx * 0.25 * steps; // dragged by the pusher this frame
+              c.vx *= 0.9;
             }
           }
         }
@@ -695,11 +697,13 @@
           } else {
             var moving = (Math.abs(ca.vx) >= Math.abs(cb.vx)) ? ca : cb;
             var other2 = (moving === ca) ? cb : ca;
-            if (moving.x + moving.w / 2 < other2.x + other2.w / 2) moving.x = other2.x - moving.w;
-            else moving.x = other2.x + other2.w;
-            if (Math.abs(other2.vx) < Math.abs(moving.vx) * 0.5) {
-              other2.vx += moving.vx * 0.5;
-              moving.vx *= 0.5;
+            // separation only: split the overlap, no velocity transfer
+            if (moving.x + moving.w / 2 < other2.x + other2.w / 2) {
+              moving.x = other2.x - moving.w / 2;
+              other2.x = moving.x + moving.w;
+            } else {
+              other2.x = moving.x + moving.w;
+              moving.x = other2.x - moving.w;
             }
           }
         }
