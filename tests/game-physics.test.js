@@ -1543,7 +1543,7 @@ test('the Slowmo pickup slows the whole game to half pace for its duration', () 
   game.step(); // pickup + ramp start
   const mid = Math.floor(24 * 1.5) + Math.floor(5 * 60 * 0.75) - 5; // mid-hold
   let minSpeed = 1;
-  for (let f = 0; f < mid + 120; f++) {
+  for (let f = 0; f < mid + 200; f++) { // ramp in + hold + ramp out
     game.step();
     if (f < mid && game.gameSpeed < minSpeed) minSpeed = game.gameSpeed;
   }
