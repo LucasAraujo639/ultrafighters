@@ -241,9 +241,9 @@
   // constant so the rate can be changed in one place if needed.
   // The artifact simulates at 24 fps and this port renders at 60 Hz: running
   // 1 tick per step made everything 2.5x faster in real time. TIME_SCALE 0.4
-  // (= 24/60) restores the original's real-time pace: same jump height and
-  // fall times, same walking speed in px/s (velocities *0.4, gravity *0.16).
-  var TIME_SCALE = 24 / FPS;
+  // was the original's exact pace; 0.5 keeps the same feel with a touch more
+  // tempo (velocities *0.5, gravity *0.25 — jump height stays identical).
+  var TIME_SCALE = 0.5;
   var VEL_SCALE = TIME_SCALE; // 1
   var ACCEL_SCALE = TIME_SCALE * TIME_SCALE; // 1
   var TICKS_TO_STEPS = 1 / TIME_SCALE; // 1

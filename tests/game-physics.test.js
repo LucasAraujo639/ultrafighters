@@ -252,8 +252,8 @@ test('the third punch launches the victim, who lands knocked down and gets up', 
   assert.equal(victim.falling, true, 'the combo finisher ragdolls the victim');
   assert.equal(victim.knockedDown, false);
   assert.equal(victim.onGround, false);
-  assert.ok(Math.abs(victim.airVelocityX - 1.2) < 1e-6);
-  assert.ok(Math.abs(victim.airVelocityY + 1) < 1e-6);
+  assert.ok(Math.abs(victim.airVelocityX - 1.5) < 1e-6);
+  assert.ok(Math.abs(victim.airVelocityY + 1.25) < 1e-6);
   assert.ok(victim.hp < 100, 'the finisher also deals its link damage');
 
   // The ragdoll lands and becomes Knockdowned (lying on the ground).
@@ -845,7 +845,7 @@ test('double-tapping a movement direction sprints at twice the run speed', () =>
   game.step(); // re-press inside the window
 
   assert.equal(player.sprinting, true, 'the double-tap activates the sprint');
-  assert.equal(player.airVelocityX, 1.36, 'RunSpeed is doubled while sprinting');
+  assert.equal(player.airVelocityX, 1.7, 'RunSpeed is doubled while sprinting');
   assert.ok(player.shortDiveTimer > 0, 'the double-tap also arms the short dive');
 
   // Releasing a sprint and pressing again re-sprints immediately.
@@ -889,7 +889,7 @@ test('a slow re-press does not sprint', () => {
   game.step();
 
   assert.equal(player.sprinting, false);
-  assert.equal(player.airVelocityX, 0.68, 'it stays a normal run');
+  assert.equal(player.airVelocityX, 0.85, 'it stays a normal run');
 });
 
 test('Shift no longer activates the sprint', () => {
@@ -904,7 +904,7 @@ test('Shift no longer activates the sprint', () => {
   for (let frame = 0; frame < 5; frame++) game.step();
 
   assert.equal(player.sprinting, false);
-  assert.equal(player.airVelocityX, 0.68);
+  assert.equal(player.airVelocityX, 0.85);
 });
 
 test('walk and sprint use the tuned per-step pace at 60 Hz', () => {
@@ -914,17 +914,17 @@ test('walk and sprint use the tuned per-step pace at 60 Hz', () => {
   resetPlayer(player, 120, floor.y - player.h, true);
   player.groundedPlatform = floor;
 
-  // TIME_SCALE 0.4: 1.7*0.4 px/step at 60 Hz => 40.8 px/s (the original's pace)
+  // TIME_SCALE 0.5: 1.7*0.5 px/step at 60 Hz => 51 px/s
   const startX = player.x;
   keyDown(listeners, 'KeyD');
   for (let frame = 0; frame < 60; frame++) game.step();
   assert.ok(
-    Math.abs(player.x - startX - 40.8) < 0.01,
-    'one second of walking covers 0.68 px/step * 60 steps'
+    Math.abs(player.x - startX - 51) < 0.01,
+    'one second of walking covers 0.85 px/step * 60 steps'
   );
 
-  // Sprint is 2x run speed and drains 1.2*0.4 per step:
-  // 100 / (0.48 * 60) = 3.47 s of full stamina.
+  // Sprint is 2x run speed and drains 1.2*0.5 per step:
+  // 100 / (0.6 * 60) = 2.78 s of full stamina.
   keyUp(listeners, 'KeyD');
   game.step();
   keyDown(listeners, 'KeyD');
@@ -936,8 +936,8 @@ test('walk and sprint use the tuned per-step pace at 60 Hz', () => {
     sprintSteps++;
   }
   assert.ok(
-    Math.abs(sprintSteps / 60 - 100 / (0.48 * 60)) < 0.05,
-    'full stamina lasts about 3.5 s'
+    Math.abs(sprintSteps / 60 - 100 / (0.6 * 60)) < 0.05,
+    'full stamina lasts about 2.8 s'
   );
 });
 
@@ -981,12 +981,12 @@ test('the fixed-step simulation is consistent at 30, 60, and 144 render FPS', ()
 test('damaged fighters passively regen HP after the extracted delay', () => {
   const { game } = createGame();
   const player = game.players[0];
-  player.damage(40); // 100 -> 60, arms the 3-second regen block (72 ticks * 2.5)
+  player.damage(40); // 100 -> 60, arms the 144-step regen block (72 ticks * 2)
   assert.equal(player.hp, 60);
-  for (let frame = 0; frame < 180; frame++) game.step();
-  assert.equal(player.hp, 60, 'no regen during the 180-step damage window');
+  for (let frame = 0; frame < 144; frame++) game.step();
+  assert.equal(player.hp, 60, 'no regen during the 144-step damage window');
   for (let frame = 0; frame < 60; frame++) game.step();
-  assert.ok(Math.abs(player.hp - 62.4) < 0.01, '0.04 HP per step after the delay');
+  assert.ok(Math.abs(player.hp - 63) < 0.01, '0.05 HP per step after the delay');
 });
 
 test('a dead fighter never regenerates back to life', () => {
