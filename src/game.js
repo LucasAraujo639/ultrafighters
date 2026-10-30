@@ -781,23 +781,24 @@
   var ctx = canvas.getContext('2d');
 
   // ---------- Weapon sprites (extracted DefineSprite PNG folders) ----------
+  // Weapon sprite SVG IDs as identified by the user (superfighters/shapes/)
   var weaponSpriteDefs = {
-    pistol: 'DefineSprite_222_wpn_pistol/1.png',
-    rifle: 'DefineSprite_227_wpn_rifle/1.png',
-    shotgun: 'DefineSprite_232_wpn_shotgun/1.png',
-    sniper: 'DefineSprite_237_wpn_sniper/1.png',
-    bazooka: 'DefineSprite_256_wpn_bazooka/1.png',
-    flamethrower: 'DefineSprite_509_wpn_flamethrower/1.png',
-    sword: 'DefineSprite_295_wpn_sword/1.png',
-    machete: 'DefineSprite_300_wpn_machete/1.png',
-    axe: 'DefineSprite_504_wpn_axe/1.png',
-    grenade: 'DefineSprite_282_wpn_grenades/1.png',
-    molotov: 'DefineSprite_290_wpn_molotovs/1.png',
-    magnum: 'DefineSprite_791_wpn_magnum/1.png',
-    uzi: 'DefineSprite_896_wpn_uzi/1.png',
-    slowmo: 'DefineSprite_885_wpn_slowmo_05/1.png',
-    pills: 'DefineSprite_786_wpn_pills/1.png',
-    medkit: 'DefineSprite_781_wpn_medkit/1.png'
+    pistol: '213.svg',
+    magnum: '787.svg',
+    uzi: '892.svg',
+    rifle: '223.svg',
+    shotgun: '228.svg',
+    sniper: '233.svg',
+    bazooka: '252.svg',
+    flamethrower: '505.svg',
+    machete: '296.svg',
+    axe: '500.svg',
+    sword: '291.svg',
+    grenade: '278.svg',
+    molotov: '286.svg',
+    pills: '782.svg',
+    medkit: '777.svg',
+    slowmo: '882.svg'
   };
   var WEAPON_SPRITE_WIDTH = { // pickup/hand width in px (original scale)
     pistol: 15, uzi: 15, magnum: 14, rifle: 20, shotgun: 20, sniper: 22,
@@ -833,7 +834,7 @@
             }
           } catch (e) { /* keep procedural fallback */ }
         };
-        img.src = 'superfighters/sprites/' + path;
+        img.src = 'superfighters/shapes/' + path;
       })(_wshape, weaponSpriteDefs[_wshape]);
     }
   }
