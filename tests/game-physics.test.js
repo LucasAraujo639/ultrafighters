@@ -1552,3 +1552,42 @@ test('a fighter standing on a crate cannot kick it from on top', () => {
   assert.equal(crate.hp, hpBefore, 'the mounted crate took no kick damage');
   assert.ok(Math.abs(crate.vx - vxBefore) < 1e-6, 'the mounted crate was not shoved');
 });
+
+test('punch combos beside a crate still shove it (floor-level sweep)', () => {
+  const { game, listeners } = createGame();
+  const player = game.players[0];
+  const floor = { x: 0, y: 500, w: 800, h: 100, solidSides: true, cloud: false, ladder: false };
+  game.platforms.length = 0;
+  game.platforms.push(floor);
+  game.crates.length = 0;
+  const crate = { x: 330, y: floor.y - 20, w: 20, h: 20, sx: 330, sy: floor.y - 20, vx: 0, vy: 0, hp: 60, hp0: 60, angle: 0, spin: 0, resting: true, dead: false };
+  game.crates.push(crate);
+  resetPlayer(player, 310, floor.y - player.h, true);
+  player.groundedPlatform = floor;
+  player.groundedCrate = null; // beside it, not on top
+  player.lastDirX = 1;
+  keyDown(listeners, 'KeyF');
+  for (let frame = 0; frame < 14; frame++) game.step(); // punch lands
+  keyUp(listeners, 'KeyF');
+  assert.ok(crate.hp < 60, 'the punch hit the crate');
+  assert.ok(crate.vx !== 0 || crate.x > 330, 'the punch shoved it');
+});
+
+test('a fighter standing ON the crate still never hits it', () => {
+  const { game, listeners } = createGame();
+  const player = game.players[0];
+  const floor = { x: 0, y: 500, w: 800, h: 100, solidSides: true, cloud: false, ladder: false };
+  game.platforms.length = 0;
+  game.platforms.push(floor);
+  game.crates.length = 0;
+  const crate = { x: 400, y: floor.y - 20, w: 20, h: 20, sx: 400, sy: floor.y - 20, vx: 0, vy: 0, hp: 60, hp0: 60, angle: 0, spin: 0, resting: true, dead: false };
+  game.crates.push(crate);
+  resetPlayer(player, 402, floor.y - player.h - 20, true);
+  player.groundedPlatform = null;
+  player.groundedCrate = crate;
+  for (let frame = 0; frame < 5; frame++) game.step();
+  keyDown(listeners, 'KeyF');
+  for (let frame = 0; frame < 14; frame++) game.step();
+  keyUp(listeners, 'KeyF');
+  assert.equal(crate.hp, 60, 'the mounted crate stays untouched');
+});

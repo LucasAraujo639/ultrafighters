@@ -733,12 +733,13 @@
 
   function hitCratesInReach(attacker, reach, damage, pushX, pushY) {
     var dir = attacker.lastDirX;
-    // Extracted KickHit sweep: vertical band from y-16 up to the feet — a
-    // crate under the feet (the one he stands on) is never in the sweep
+    // Extracted KickHit sweep: vertical band from y-16 down to the feet (+2px,
+    // so floor-level crates BESIDE the fighter still take the hit — only the
+    // one he stands on is excluded by the mounted guard below)
     var hitBox = {
       x: dir > 0 ? attacker.x + attacker.w : attacker.x - reach,
       y: attacker.y - 16 * PLAYER_SIZE_SCALE,
-      w: reach, h: 16 * PLAYER_SIZE_SCALE
+      w: reach, h: 16 * PLAYER_SIZE_SCALE + 2
     };
     for (var i = 0; i < crates.length; i++) {
       var c = crates[i];
