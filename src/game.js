@@ -3377,8 +3377,8 @@ this.updateBurst();
       }
       // the weapon at 1.1x its natural sprite size; the frame
       // adapts TO the weapon with a fixed 4 px margin on every side
-      var tw = ws.w * 1.1;
-      var th = ws.h * 1.1;
+      var tw = ws.w * 1.2;
+      var th = ws.h * 1.2;
       var baseY = item.y + 2; // resting ON the floor line
       var cx = item.x;
       var pad = 4;
