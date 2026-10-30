@@ -239,7 +239,11 @@
   // simulation advances one artifact tick per 60 Hz step (fast mode).
   // TIME_SCALE = 1 means no conversion is applied. It is kept as a named
   // constant so the rate can be changed in one place if needed.
-  var TIME_SCALE = 1;
+  // The artifact simulates at 24 fps and this port renders at 60 Hz: running
+  // 1 tick per step made everything 2.5x faster in real time. TIME_SCALE 0.4
+  // (= 24/60) restores the original's real-time pace: same jump height and
+  // fall times, same walking speed in px/s (velocities *0.4, gravity *0.16).
+  var TIME_SCALE = 24 / FPS;
   var VEL_SCALE = TIME_SCALE; // 1
   var ACCEL_SCALE = TIME_SCALE * TIME_SCALE; // 1
   var TICKS_TO_STEPS = 1 / TIME_SCALE; // 1
@@ -324,6 +328,8 @@
     name: 'Grenade', throwSpeed: 5.5, upBias: -2, throwTimer: 72, ammo: 3,
     radius: 90, damageMax: 30, damageMin: 5, shape: 'grenade'
   };
+  GRENADE.throwSpeed *= TIME_SCALE;
+  GRENADE.upBias *= TIME_SCALE;
   // Health pickups (extracted WeaponPowerupData): Ammo IS the heal amount,
   // applied as HP += Ammo on pickup (clamped at 100 by the HP setter)
   // CRATE props (extracted AddBox "CRATE"): 14x14, BodyData hp 40, dynamic
@@ -339,8 +345,8 @@
   // -KickPower) plus the (0,-0.4) contact push). KickPower 1.7 m/s with the
   // 30 px/m scale at 24 fps = 1.7*30/24 = 2.125 px/tick; total vertical
   // -(1.7+0.4)*30/24 = -2.625. Same screen distance as the original.
-  var CRATE_KICK_PUSH_X = (1.7 * 30) / 24; // ≈ 2.125 px/step
-  var CRATE_KICK_PUSH_Y = (-(1.7 + 0.4) * 30) / 24; // ≈ -2.625 px/step
+  var CRATE_KICK_PUSH_X = ((1.7 * 30) / 24) * TIME_SCALE; // ≈ 0.85 px/step
+  var CRATE_KICK_PUSH_Y = ((-(1.7 + 0.4) * 30) / 24) * TIME_SCALE; // ≈ -1.05 px/step
   var HEALTH_PILLS = { kind: 'health', name: 'Pills', ammo: 25, shape: 'pills' };
   var HEALTH_MEDKIT = { kind: 'health', name: 'Medkit', ammo: 50, shape: 'medkit' };
   // AbortAiming drop velocities (extracted): forced [hit while aiming], empty [toss]
@@ -646,14 +652,12 @@
             grounded = true;
             o.vx += c.vx * 0.25; // weight transfer
           } else if (Math.abs(c.vx) > Math.abs(o.vx) + 0.01 && c.y + c.h > o.y + 2) {
-            // ramming another crate sideways: positional drag only — the moved
-            // crate pushes the neighbor along, it never receives the hit's
-            // impulse (no "long-range" kick through the stack)
+            // ramming another crate sideways: transfer momentum and stop
             var cxEdge = (c.vx > 0) ? o.x - c.w : o.x + o.w;
             if ((c.vx > 0 && c.x > cxEdge) || (c.vx < 0 && c.x < cxEdge)) {
               c.x = cxEdge;
-              o.x += c.vx * 0.25 * steps; // dragged by the pusher this frame
-              c.vx *= 0.9;
+              o.vx += c.vx * 0.5;
+              c.vx *= 0.5;
             }
           }
         }
@@ -697,13 +701,11 @@
           } else {
             var moving = (Math.abs(ca.vx) >= Math.abs(cb.vx)) ? ca : cb;
             var other2 = (moving === ca) ? cb : ca;
-            // separation only: split the overlap, no velocity transfer
-            if (moving.x + moving.w / 2 < other2.x + other2.w / 2) {
-              moving.x = other2.x - moving.w / 2;
-              other2.x = moving.x + moving.w;
-            } else {
-              other2.x = moving.x + moving.w;
-              moving.x = other2.x - moving.w;
+            if (moving.x + moving.w / 2 < other2.x + other2.w / 2) moving.x = other2.x - moving.w;
+            else moving.x = other2.x + other2.w;
+            if (Math.abs(other2.vx) < Math.abs(moving.vx) * 0.5) {
+              other2.vx += moving.vx * 0.5;
+              moving.vx *= 0.5;
             }
           }
         }
@@ -737,18 +739,14 @@
 
   function hitCratesInReach(attacker, reach, damage, pushX, pushY) {
     var dir = attacker.lastDirX;
-    // Extracted KickHit sweep: vertical band from y-16 down to the feet (+2px,
-    // so floor-level crates BESIDE the fighter still take the hit — only the
-    // one he stands on is excluded by the mounted guard below)
     var hitBox = {
       x: dir > 0 ? attacker.x + attacker.w : attacker.x - reach,
-      y: attacker.y - 16 * PLAYER_SIZE_SCALE,
-      w: reach, h: 16 * PLAYER_SIZE_SCALE + 2
+      y: attacker.y,
+      w: reach, h: attacker.h
     };
     for (var i = 0; i < crates.length; i++) {
       var c = crates[i];
       if (c.dead) continue;
-      if (c === attacker.groundedCrate) continue; // standing on it: no kick
       if (!rectsOverlap(hitBox, c)) continue;
       damageCrate(c, damage, dir * (pushX || 3), pushY || -2.5);
     }
@@ -1570,7 +1568,7 @@
     var muzzleY = this.y + 16;
     for (var i = 0; i < gun.pellets; i++) {
       var deflection = ((Math.random() * 2 - 1) * gun.spread * Math.PI) / 180;
-      var speed = gun.speed;
+      var speed = gun.speed * TIME_SCALE;
       bullets.push({
         x: muzzleX,
         y: muzzleY,
@@ -2273,17 +2271,13 @@
         var kickReach = KICK_RANGE * PLAYER_SIZE_SCALE;
         var kickBox = {
           x: this.lastDirX > 0 ? this.x + this.w : this.x - kickReach,
-          y: this.y - 16 * PLAYER_SIZE_SCALE,
-          w: kickReach, h: this.h + 16 * PLAYER_SIZE_SCALE + 2
+          y: this.y,
+          w: kickReach, h: this.h
         };
         var kickTarget = null;
         for (var kci = 0; kci < crates.length; kci++) {
           var kc = crates[kci];
-          if (kc.dead) continue;
-          // Extracted KickHit disqualifies the object you stand on — EXCEPT the
-          // crouch stomp: crouched on top + MELEE kicks it to move the crate
-          if (kc === this.groundedCrate && !this.crouching) continue;
-          if (rectsOverlap(kickBox, kc)) { kickTarget = kc; break; }
+          if (!kc.dead && rectsOverlap(kickBox, kc)) { kickTarget = kc; break; }
         }
         if (kickTarget && !this.meleeConnects(other)) {
           this.kickCooldown = KICK_COOLDOWN;

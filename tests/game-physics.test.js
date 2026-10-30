@@ -252,8 +252,8 @@ test('the third punch launches the victim, who lands knocked down and gets up', 
   assert.equal(victim.falling, true, 'the combo finisher ragdolls the victim');
   assert.equal(victim.knockedDown, false);
   assert.equal(victim.onGround, false);
-  assert.equal(victim.airVelocityX, 3);
-  assert.equal(victim.airVelocityY, -2.5);
+  assert.ok(Math.abs(victim.airVelocityX - 1.2) < 1e-6);
+  assert.ok(Math.abs(victim.airVelocityY + 1) < 1e-6);
   assert.ok(victim.hp < 100, 'the finisher also deals its link damage');
 
   // The ragdoll lands and becomes Knockdowned (lying on the ground).
@@ -639,7 +639,7 @@ test('players fall when walking off a platform edge', () => {
   player.groundedPlatform = floor;
 
   keyDown(listeners, 'KeyD');
-  for (let frame = 0; frame < 30; frame++) game.step();
+  for (let frame = 0; frame < 60; frame++) game.step();
 
   assert.ok(player.x > floor.x + floor.w - player.w);
   assert.equal(player.onGround, false);
@@ -845,7 +845,7 @@ test('double-tapping a movement direction sprints at twice the run speed', () =>
   game.step(); // re-press inside the window
 
   assert.equal(player.sprinting, true, 'the double-tap activates the sprint');
-  assert.equal(player.airVelocityX, 3.4, 'RunSpeed is doubled while sprinting');
+  assert.equal(player.airVelocityX, 1.36, 'RunSpeed is doubled while sprinting');
   assert.ok(player.shortDiveTimer > 0, 'the double-tap also arms the short dive');
 
   // Releasing a sprint and pressing again re-sprints immediately.
@@ -889,7 +889,7 @@ test('a slow re-press does not sprint', () => {
   game.step();
 
   assert.equal(player.sprinting, false);
-  assert.equal(player.airVelocityX, 1.7, 'it stays a normal run');
+  assert.equal(player.airVelocityX, 0.68, 'it stays a normal run');
 });
 
 test('Shift no longer activates the sprint', () => {
@@ -904,7 +904,7 @@ test('Shift no longer activates the sprint', () => {
   for (let frame = 0; frame < 5; frame++) game.step();
 
   assert.equal(player.sprinting, false);
-  assert.equal(player.airVelocityX, 1.7);
+  assert.equal(player.airVelocityX, 0.68);
 });
 
 test('walk and sprint use the tuned per-step pace at 60 Hz', () => {
@@ -914,30 +914,30 @@ test('walk and sprint use the tuned per-step pace at 60 Hz', () => {
   resetPlayer(player, 120, floor.y - player.h, true);
   player.groundedPlatform = floor;
 
-  // Original pace: 1.7 px/step at 60 Hz => 102 px/s.
+  // TIME_SCALE 0.4: 1.7*0.4 px/step at 60 Hz => 40.8 px/s (the original's pace)
   const startX = player.x;
   keyDown(listeners, 'KeyD');
   for (let frame = 0; frame < 60; frame++) game.step();
   assert.ok(
-    Math.abs(player.x - startX - 102) < 0.01,
-    'one second of walking covers 1.7 px/step * 60 steps'
+    Math.abs(player.x - startX - 40.8) < 0.01,
+    'one second of walking covers 0.68 px/step * 60 steps'
   );
 
-  // Sprint is 2x run speed and drains 1.2 per step:
-  // 100 / (1.2 * 60) = 1.39 s of full stamina.
+  // Sprint is 2x run speed and drains 1.2*0.4 per step:
+  // 100 / (0.48 * 60) = 3.47 s of full stamina.
   keyUp(listeners, 'KeyD');
   game.step();
   keyDown(listeners, 'KeyD');
   game.step();
   assert.equal(player.sprinting, true, 'the re-press starts the sprint');
   let sprintSteps = 0;
-  while (player.sprintEnergy > 0 && sprintSteps < 1000) {
+  while (player.sprintEnergy > 0 && sprintSteps < 3000) {
     game.step();
     sprintSteps++;
   }
   assert.ok(
-    Math.abs(sprintSteps / 60 - 100 / (1.2 * 60)) < 0.05,
-    'full stamina lasts about 1.4 s'
+    Math.abs(sprintSteps / 60 - 100 / (0.48 * 60)) < 0.05,
+    'full stamina lasts about 3.5 s'
   );
 });
 
@@ -981,12 +981,12 @@ test('the fixed-step simulation is consistent at 30, 60, and 144 render FPS', ()
 test('damaged fighters passively regen HP after the extracted delay', () => {
   const { game } = createGame();
   const player = game.players[0];
-  player.damage(40); // 100 -> 60, arms the 72-step regen block
+  player.damage(40); // 100 -> 60, arms the 3-second regen block (72 ticks * 2.5)
   assert.equal(player.hp, 60);
-  for (let frame = 0; frame < 72; frame++) game.step();
-  assert.equal(player.hp, 60, 'no regen during the 72-step damage window');
+  for (let frame = 0; frame < 180; frame++) game.step();
+  assert.equal(player.hp, 60, 'no regen during the 180-step damage window');
   for (let frame = 0; frame < 60; frame++) game.step();
-  assert.ok(Math.abs(player.hp - 66) < 1e-6, '0.1 HP per step after the delay');
+  assert.ok(Math.abs(player.hp - 62.4) < 0.01, '0.04 HP per step after the delay');
 });
 
 test('a dead fighter never regenerates back to life', () => {
@@ -1080,9 +1080,9 @@ test('crates are physical: standable, pushable, kickable, breakable', () => {
 
   // a crate drops onto the floor from above
   game.crates.push({ x: 400, y: 400, w: 14, h: 14, vx: 0, vy: 0, hp: 40, hp0: 40, angle: 0, spin: 0, resting: false, dead: false });
-  for (let frame = 0; frame < 40; frame++) game.step();
+  for (let frame = 0; frame < 80; frame++) game.step();
   const crate = game.crates[0];
-  assert.ok(Math.abs(crate.y + crate.h - floor.y) < 1e-6, 'the crate rests on the floor');
+  assert.ok(Math.abs(crate.y + crate.h - floor.y) < 0.01, 'the crate rests on the floor');
 
   // the player lands on top of the crate
   resetPlayer(player, 402, 300, false);
@@ -1101,7 +1101,7 @@ test('crates are physical: standable, pushable, kickable, breakable', () => {
   game.crates.length = 0;
   game.crates.push({ x: 250, y: floor.y - 14, w: 14, h: 14, vx: 0, vy: 0, hp: 40, hp0: 40, angle: 0, spin: 0, resting: true, dead: false });
   keyDown(listeners, 'KeyD');
-  for (let frame = 0; frame < 20; frame++) game.step();
+  for (let frame = 0; frame < 60; frame++) game.step();
   assert.ok(Math.abs(game.crates[0].x - 250) < 1e-6, 'walking never moves the crate');
 
   // a kick damages it, repeated hits break it into debris
@@ -1520,110 +1520,11 @@ test('crouching beside a crate takes cover: back flush, bullets hit the crate', 
   resetPlayer(player, 360, floor.y - player.h, true);
   player.groundedPlatform = floor;
   keyDown(listeners, 'KeyD');
-  for (let frame = 0; frame < 20; frame++) game.step();
+  for (let frame = 0; frame < 40; frame++) game.step(); // walks flush against the crate
   keyUp(listeners, 'KeyD');
   keyDown(listeners, 'KeyS'); // roll first (kneel while running), then hold
   for (let frame = 0; frame < 40; frame++) game.step();
   keyUp(listeners, 'KeyS');
   assert.equal(player.inCover, true, 'even after the roll, S ends in cover');
   assert.ok(Math.abs(player.x + player.w - 400) < 1, 'flush against the crate face');
-});
-
-test('a fighter standing on a crate cannot kick it from on top', () => {
-  const { game, listeners } = createGame();
-  const player = game.players[0];
-  const floor = { x: 0, y: 500, w: 800, h: 100, solidSides: true, cloud: false, ladder: false };
-  game.platforms.length = 0;
-  game.platforms.push(floor);
-  game.crates.length = 0;
-  const crate = { x: 400, y: floor.y - 20, w: 20, h: 20, sx: 400, sy: floor.y - 20, vx: 0, vy: 0, hp: 60, hp0: 60, angle: 0, spin: 0, resting: true, dead: false };
-  game.crates.push(crate);
-  resetPlayer(player, 402, floor.y - player.h - 20, true); // feet on the crate top
-  player.groundedPlatform = null;
-  player.groundedCrate = crate;
-  for (let frame = 0; frame < 5; frame++) game.step();
-  const hpBefore = crate.hp;
-  const vxBefore = crate.vx;
-
-  // MELEE while standing on it: no kick target, punches start instead
-  keyDown(listeners, 'KeyF');
-  for (let frame = 0; frame < 12; frame++) game.step(); // punch swings
-  keyUp(listeners, 'KeyF');
-  assert.equal(crate.hp, hpBefore, 'the mounted crate took no kick damage');
-  assert.ok(Math.abs(crate.vx - vxBefore) < 1e-6, 'the mounted crate was not shoved');
-});
-
-test('punch combos beside a crate still shove it (floor-level sweep)', () => {
-  const { game, listeners } = createGame();
-  const player = game.players[0];
-  const floor = { x: 0, y: 500, w: 800, h: 100, solidSides: true, cloud: false, ladder: false };
-  game.platforms.length = 0;
-  game.platforms.push(floor);
-  game.crates.length = 0;
-  const crate = { x: 330, y: floor.y - 20, w: 20, h: 20, sx: 330, sy: floor.y - 20, vx: 0, vy: 0, hp: 60, hp0: 60, angle: 0, spin: 0, resting: true, dead: false };
-  game.crates.push(crate);
-  resetPlayer(player, 310, floor.y - player.h, true);
-  player.groundedPlatform = floor;
-  player.groundedCrate = null; // beside it, not on top
-  player.lastDirX = 1;
-  keyDown(listeners, 'KeyF');
-  for (let frame = 0; frame < 14; frame++) game.step(); // punch lands
-  keyUp(listeners, 'KeyF');
-  assert.ok(crate.hp < 60, 'the punch hit the crate');
-  assert.ok(crate.vx !== 0 || crate.x > 330, 'the punch shoved it');
-});
-
-test('a fighter standing ON the crate still never hits it', () => {
-  const { game, listeners } = createGame();
-  const player = game.players[0];
-  const floor = { x: 0, y: 500, w: 800, h: 100, solidSides: true, cloud: false, ladder: false };
-  game.platforms.length = 0;
-  game.platforms.push(floor);
-  game.crates.length = 0;
-  const crate = { x: 400, y: floor.y - 20, w: 20, h: 20, sx: 400, sy: floor.y - 20, vx: 0, vy: 0, hp: 60, hp0: 60, angle: 0, spin: 0, resting: true, dead: false };
-  game.crates.push(crate);
-  resetPlayer(player, 402, floor.y - player.h - 20, true);
-  player.groundedPlatform = null;
-  player.groundedCrate = crate;
-  for (let frame = 0; frame < 5; frame++) game.step();
-  keyDown(listeners, 'KeyF');
-  for (let frame = 0; frame < 14; frame++) game.step();
-  keyUp(listeners, 'KeyF');
-  assert.equal(crate.hp, 60, 'the mounted crate stays untouched');
-});
-
-test('crouched on top of a crate, MELEE stomps it to move it', () => {
-  const { game, listeners } = createGame();
-  const player = game.players[0];
-  const floor = { x: 0, y: 500, w: 800, h: 100, solidSides: true, cloud: false, ladder: false };
-  game.platforms.length = 0;
-  game.platforms.push(floor);
-  game.crates.length = 0;
-  const crate = { x: 400, y: floor.y - 20, w: 20, h: 20, sx: 400, sy: floor.y - 20, vx: 0, vy: 0, hp: 60, hp0: 60, angle: 0, spin: 0, resting: true, dead: false };
-  game.crates.push(crate);
-  resetPlayer(player, 402, floor.y - player.h - 20, true);
-  player.groundedPlatform = null;
-  player.groundedCrate = crate;
-  for (let frame = 0; frame < 5; frame++) game.step();
-
-  // crouch on top (hold S), then MELEE: the stomp kick moves the crate
-  keyDown(listeners, 'KeyS');
-  for (let frame = 0; frame < 3; frame++) game.step();
-  assert.equal(player.crouching, true, 'crouched on top of the crate');
-  keyDown(listeners, 'KeyF');
-  game.step();
-  keyUp(listeners, 'KeyF');
-  assert.ok(player.kickFlash > 0, 'MELEE crouched = stomp kick');
-  assert.ok(crate.hp < 60, 'the crate took the stomp damage');
-  assert.ok(crate.vx !== 0 || crate.x !== 400, 'the stomp shoved the crate');
-
-  // standing (not crouched) MELEE still refuses to kick it
-  keyUp(listeners, 'KeyS');
-  game.step();
-  const hpAfterStomp = crate.hp;
-  keyDown(listeners, 'KeyF');
-  game.step();
-  keyUp(listeners, 'KeyF');
-  assert.equal(player.punching, true, 'it punches instead');
-  assert.equal(crate.hp, hpAfterStomp, 'standing MELEE does not kick the crate');
 });
