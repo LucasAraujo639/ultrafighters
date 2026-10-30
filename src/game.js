@@ -785,24 +785,25 @@
   var ctx = canvas.getContext('2d');
 
   // ---------- Weapon sprites (extracted DefineSprite PNG folders) ----------
-  // Weapon sprite SVG IDs as identified by the user (superfighters/shapes/)
+  // Weapon sprites at the ORIGINAL's natural scale: the DefineSprite PNGs hold
+  // the weapon at 1:1 inside a padded canvas (pistol weapon is just 10x9).
   var weaponSpriteDefs = {
-    pistol: '213.svg',
-    magnum: '787.svg',
-    uzi: '892.svg',
-    rifle: '223.svg',
-    shotgun: '228.svg',
-    sniper: '233.svg',
-    bazooka: '252.svg',
-    flamethrower: '505.svg',
-    machete: '296.svg',
-    axe: '500.svg',
-    sword: '291.svg',
-    grenade: '278.svg',
-    molotov: '286.svg',
-    pills: '782.svg',
-    medkit: '777.svg',
-    slowmo: '882.svg'
+    pistol: 'DefineSprite_222_wpn_pistol/1.png',
+    magnum: 'DefineSprite_791_wpn_magnum/1.png',
+    uzi: 'DefineSprite_896_wpn_uzi/1.png',
+    rifle: 'DefineSprite_227_wpn_rifle/1.png',
+    shotgun: 'DefineSprite_232_wpn_shotgun/1.png',
+    sniper: 'DefineSprite_237_wpn_sniper/1.png',
+    bazooka: 'DefineSprite_256_wpn_bazooka/1.png',
+    flamethrower: 'DefineSprite_509_wpn_flamethrower/1.png',
+    machete: 'DefineSprite_300_wpn_machete/1.png',
+    axe: 'DefineSprite_504_wpn_axe/1.png',
+    sword: 'DefineSprite_295_wpn_sword/1.png',
+    grenade: 'DefineSprite_282_wpn_grenades/1.png',
+    molotov: 'DefineSprite_290_wpn_molotovs/1.png',
+    pills: 'DefineSprite_786_wpn_pills/1.png',
+    medkit: 'DefineSprite_781_wpn_medkit/1.png',
+    slowmo: 'DefineSprite_885_wpn_slowmo_05/1.png'
   };
   var WEAPON_SPRITE_WIDTH = { // pickup/hand width in px (original scale)
     pistol: 15, uzi: 15, magnum: 14, rifle: 20, shotgun: 20, sniper: 22,
@@ -815,10 +816,31 @@
       (function (shape, path) {
         var img = new Image();
         img.onload = function () {
-          // the shape's own rect is already the weapon silhouette: keep it whole
-          weaponSpriteImages[shape] = { img: img, w: img.width, h: img.height };
+          // measure the weapon's opaque bounding box inside the padded canvas
+          try {
+            var m = document.createElement('canvas');
+            m.width = img.width; m.height = img.height;
+            var mctx = m.getContext('2d');
+            mctx.drawImage(img, 0, 0);
+            var data = mctx.getImageData(0, 0, img.width, img.height).data;
+            var minX = img.width, minY = img.height, maxX = -1, maxY = -1;
+            for (var py = 0; py < img.height; py++) {
+              for (var px2 = 0; px2 < img.width; px2++) {
+                if (data[(py * img.width + px2) * 4 + 3] > 16) {
+                  if (px2 < minX) minX = px2;
+                  if (px2 > maxX) maxX = px2;
+                  if (py < minY) minY = py;
+                  if (py > maxY) maxY = py;
+                }
+              }
+            }
+            if (maxX >= minX && maxY >= minY) {
+              weaponSpriteImages[shape] = { img: img, w: maxX - minX + 1, h: maxY - minY + 1,
+                sx: minX, sy: minY };
+            }
+          } catch (e) { /* keep procedural fallback */ }
         };
-        img.src = 'superfighters/shapes/' + path;
+        img.src = 'superfighters/sprites/' + path;
       })(_wshape, weaponSpriteDefs[_wshape]);
     }
   }
@@ -3375,8 +3397,8 @@ this.updateBurst();
         drawWeaponShape(item.weapon, item.x - 6, item.y - 10);
         continue;
       }
-      var tw = (WEAPON_SPRITE_WIDTH[item.weapon.shape] || 14) * 1.5;
-      var th = tw * (ws.h / ws.w);
+      var tw = ws.w; // natural 1:1 scale, exactly like the original folder
+      var th = ws.h;
       var baseY = item.y + 2; // resting ON the floor line
       var cx = item.x;
       // selection brackets frame (grey corners, like the original pickups)
@@ -3406,9 +3428,7 @@ this.updateBurst();
     // the original pickup/hand width; procedural art is only a fallback.
     var ws = weaponSpriteImages[c.shape];
     if (ws) {
-      var target = WEAPON_SPRITE_WIDTH[c.shape] || 16;
-      var wsc = target / ws.w;
-      ctx.drawImage(ws.img, x, y, ws.w * wsc, ws.h * wsc);
+      ctx.drawImage(ws.img, ws.sx, ws.sy, ws.w, ws.h, x, y, ws.w, ws.h); // 1:1
       return;
     }
     if (c.shape === 'pills') {
