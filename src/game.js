@@ -780,6 +780,64 @@
   var canvas = document.getElementById('game');
   var ctx = canvas.getContext('2d');
 
+  // ---------- Weapon sprites (extracted DefineSprite PNG folders) ----------
+  var weaponSpriteDefs = {
+    pistol: 'DefineSprite_222_wpn_pistol/1.png',
+    rifle: 'DefineSprite_227_wpn_rifle/1.png',
+    shotgun: 'DefineSprite_232_wpn_shotgun/1.png',
+    sniper: 'DefineSprite_237_wpn_sniper/1.png',
+    bazooka: 'DefineSprite_256_wpn_bazooka/1.png',
+    flamethrower: 'DefineSprite_509_wpn_flamethrower/1.png',
+    sword: 'DefineSprite_295_wpn_sword/1.png',
+    machete: 'DefineSprite_300_wpn_machete/1.png',
+    axe: 'DefineSprite_504_wpn_axe/1.png',
+    grenade: 'DefineSprite_282_wpn_grenades/1.png',
+    molotov: 'DefineSprite_290_wpn_molotovs/1.png',
+    magnum: 'DefineSprite_791_wpn_magnum/1.png',
+    uzi: 'DefineSprite_896_wpn_uzi/1.png',
+    slowmo: 'DefineSprite_885_wpn_slowmo_05/1.png',
+    pills: 'DefineSprite_786_wpn_pills/1.png',
+    medkit: 'DefineSprite_781_wpn_medkit/1.png'
+  };
+  var WEAPON_SPRITE_WIDTH = { // pickup/hand width in px (original scale)
+    pistol: 15, uzi: 15, magnum: 14, rifle: 20, shotgun: 20, sniper: 22,
+    bazooka: 22, flamethrower: 18, sword: 20, machete: 16, axe: 18,
+    grenade: 10, molotov: 10, slowmo: 12, pills: 10, medkit: 12
+  };
+  var weaponSpriteImages = {}; // shape -> { img, sx, sy, sw, sh }
+  if (typeof Image !== 'undefined' && typeof document !== 'undefined' && document.createElement) {
+    for (var _wshape in weaponSpriteDefs) {
+      (function (shape, path) {
+        var img = new Image();
+        img.onload = function () {
+          // measure the opaque bounding box: the PNG canvas has padding
+          try {
+            var m = document.createElement('canvas');
+            m.width = img.width; m.height = img.height;
+            var mctx = m.getContext('2d');
+            mctx.drawImage(img, 0, 0);
+            var data = mctx.getImageData(0, 0, img.width, img.height).data;
+            var minX = img.width, minY = img.height, maxX = -1, maxY = -1;
+            for (var py = 0; py < img.height; py++) {
+              for (var px2 = 0; px2 < img.width; px2++) {
+                if (data[(py * img.width + px2) * 4 + 3] > 16) {
+                  if (px2 < minX) minX = px2;
+                  if (px2 > maxX) maxX = px2;
+                  if (py < minY) minY = py;
+                  if (py > maxY) maxY = py;
+                }
+              }
+            }
+            if (maxX >= minX && maxY >= minY) {
+              weaponSpriteImages[shape] = { img: img, sx: minX, sy: minY, sw: maxX - minX + 1, sh: maxY - minY + 1 };
+            }
+          } catch (e) { /* keep procedural fallback */ }
+        };
+        img.src = 'superfighters/sprites/' + path;
+      })(_wshape, weaponSpriteDefs[_wshape]);
+    }
+  }
+
   // ---------- Optional player sprites (SVG shapes 592..634) ----------
   var spriteImages = Object.create(null);
   var spriteReady = false;
@@ -3306,6 +3364,15 @@
 
   // Weapon shape in the hand (local coords, held pointing right)
   function drawWeaponShape(c, x, y) {
+    // Extracted sprite (named DefineSprite PNG): the weapon as-is, scaled to
+    // the original pickup/hand width; procedural art is only a fallback.
+    var ws = weaponSpriteImages[c.shape];
+    if (ws) {
+      var target = WEAPON_SPRITE_WIDTH[c.shape] || Math.max(12, ws.sw * 0.4);
+      var wsc = target / ws.sw;
+      ctx.drawImage(ws.img, ws.sx, ws.sy, ws.sw, ws.sh, x, y, ws.sw * wsc, ws.sh * wsc);
+      return;
+    }
     if (c.shape === 'pills') {
       px(x + 1, y, 8, 6, '#e8e4da'); // pill box
       px(x + 1, y + 2, 8, 2, '#d0453a'); // red band
