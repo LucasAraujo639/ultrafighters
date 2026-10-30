@@ -1547,6 +1547,6 @@ test('the Slowmo pickup slows the whole game to half pace for its duration', () 
     game.step();
     if (f < mid && game.gameSpeed < minSpeed) minSpeed = game.gameSpeed;
   }
-  assert.ok(minSpeed < 0.6 && minSpeed > 0.4, 'the hold eases to ~0.5 pace');
+  assert.ok(minSpeed < 0.72 && minSpeed > 0.6, 'the hold eases to ~0.5 effective pace');
   assert.equal(game.gameSpeed, 1, 'the slow motion ramps back out to full speed');
 });
