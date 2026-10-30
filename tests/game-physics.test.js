@@ -252,8 +252,8 @@ test('the third punch launches the victim, who lands knocked down and gets up', 
   assert.equal(victim.falling, true, 'the combo finisher ragdolls the victim');
   assert.equal(victim.knockedDown, false);
   assert.equal(victim.onGround, false);
-  assert.ok(Math.abs(victim.airVelocityX - 1.5) < 1e-6);
-  assert.ok(Math.abs(victim.airVelocityY + 1.25) < 1e-6);
+  assert.ok(Math.abs(victim.airVelocityX - 2.25) < 1e-6);
+  assert.ok(Math.abs(victim.airVelocityY + 1.875) < 1e-6);
   assert.ok(victim.hp < 100, 'the finisher also deals its link damage');
 
   // The ragdoll lands and becomes Knockdowned (lying on the ground).
@@ -845,7 +845,7 @@ test('double-tapping a movement direction sprints at twice the run speed', () =>
   game.step(); // re-press inside the window
 
   assert.equal(player.sprinting, true, 'the double-tap activates the sprint');
-  assert.equal(player.airVelocityX, 1.7, 'RunSpeed is doubled while sprinting');
+  assert.equal(player.airVelocityX, 2.55, 'RunSpeed is doubled while sprinting');
   assert.ok(player.shortDiveTimer > 0, 'the double-tap also arms the short dive');
 
   // Releasing a sprint and pressing again re-sprints immediately.
@@ -889,7 +889,7 @@ test('a slow re-press does not sprint', () => {
   game.step();
 
   assert.equal(player.sprinting, false);
-  assert.equal(player.airVelocityX, 0.85, 'it stays a normal run');
+  assert.equal(player.airVelocityX, 1.275, 'it stays a normal run');
 });
 
 test('Shift no longer activates the sprint', () => {
@@ -904,7 +904,7 @@ test('Shift no longer activates the sprint', () => {
   for (let frame = 0; frame < 5; frame++) game.step();
 
   assert.equal(player.sprinting, false);
-  assert.equal(player.airVelocityX, 0.85);
+  assert.equal(player.airVelocityX, 1.275);
 });
 
 test('walk and sprint use the tuned per-step pace at 60 Hz', () => {
@@ -914,17 +914,17 @@ test('walk and sprint use the tuned per-step pace at 60 Hz', () => {
   resetPlayer(player, 120, floor.y - player.h, true);
   player.groundedPlatform = floor;
 
-  // TIME_SCALE 0.5: 1.7*0.5 px/step at 60 Hz => 51 px/s
+  // TIME_SCALE 0.75: 1.7*0.75 px/step at 60 Hz => 76.5 px/s
   const startX = player.x;
   keyDown(listeners, 'KeyD');
   for (let frame = 0; frame < 60; frame++) game.step();
   assert.ok(
-    Math.abs(player.x - startX - 51) < 0.01,
-    'one second of walking covers 0.85 px/step * 60 steps'
+    Math.abs(player.x - startX - 76.5) < 0.01,
+    'one second of walking covers 1.275 px/step * 60 steps'
   );
 
-  // Sprint is 2x run speed and drains 1.2*0.5 per step:
-  // 100 / (0.6 * 60) = 2.78 s of full stamina.
+  // Sprint is 2x run speed and drains 1.2*0.75 per step:
+  // 100 / (0.9 * 60) = 1.85 s of full stamina.
   keyUp(listeners, 'KeyD');
   game.step();
   keyDown(listeners, 'KeyD');
@@ -936,8 +936,8 @@ test('walk and sprint use the tuned per-step pace at 60 Hz', () => {
     sprintSteps++;
   }
   assert.ok(
-    Math.abs(sprintSteps / 60 - 100 / (0.6 * 60)) < 0.05,
-    'full stamina lasts about 2.8 s'
+    Math.abs(sprintSteps / 60 - 100 / (0.9 * 60)) < 0.05,
+    'full stamina lasts about 1.85 s'
   );
 });
 
@@ -981,12 +981,12 @@ test('the fixed-step simulation is consistent at 30, 60, and 144 render FPS', ()
 test('damaged fighters passively regen HP after the extracted delay', () => {
   const { game } = createGame();
   const player = game.players[0];
-  player.damage(40); // 100 -> 60, arms the 144-step regen block (72 ticks * 2)
+  player.damage(40); // 100 -> 60, arms the 96-step regen block (72 ticks * 4/3)
   assert.equal(player.hp, 60);
-  for (let frame = 0; frame < 144; frame++) game.step();
-  assert.equal(player.hp, 60, 'no regen during the 144-step damage window');
-  for (let frame = 0; frame < 60; frame++) game.step();
-  assert.ok(Math.abs(player.hp - 63) < 0.01, '0.05 HP per step after the delay');
+  for (let frame = 0; frame < 96; frame++) game.step();
+  assert.equal(player.hp, 60, 'no regen during the 96-step damage window');
+  for (let frame = 0; frame < 80; frame++) game.step();
+  assert.ok(Math.abs(player.hp - 66) < 0.01, '0.075 HP per step after the delay');
 });
 
 test('a dead fighter never regenerates back to life', () => {
@@ -1527,4 +1527,26 @@ test('crouching beside a crate takes cover: back flush, bullets hit the crate', 
   keyUp(listeners, 'KeyS');
   assert.equal(player.inCover, true, 'even after the roll, S ends in cover');
   assert.ok(Math.abs(player.x + player.w - 400) < 1, 'flush against the crate face');
+});
+
+test('the Slowmo pickup slows the whole game to half pace for its duration', () => {
+  const { game } = createGame();
+  const player = game.players[0];
+  const floor = { x: 0, y: 500, w: 800, h: 100, solidSides: true, cloud: false, ladder: false };
+  game.platforms.length = 0;
+  game.platforms.push(floor);
+  game.crates.length = 0;
+  resetPlayer(player, 400, floor.y - player.h, true);
+  player.groundedPlatform = floor;
+
+  game.weaponItems.push({ weapon: { kind: 'powerup', power: 'slowmo', name: 'Slowmo 0.5', time: 5, shape: 'slowmo' }, x: player.x + 4, y: floor.y - 2, taken: false, pickupDelay: 0 });
+  game.step(); // pickup + ramp start
+  const mid = Math.floor(24 * 1.5) + Math.floor(5 * 60 * 0.75) - 5; // mid-hold
+  let minSpeed = 1;
+  for (let f = 0; f < mid + 120; f++) {
+    game.step();
+    if (f < mid && game.gameSpeed < minSpeed) minSpeed = game.gameSpeed;
+  }
+  assert.ok(minSpeed < 0.6 && minSpeed > 0.4, 'the hold eases to ~0.5 pace');
+  assert.equal(game.gameSpeed, 1, 'the slow motion ramps back out to full speed');
 });

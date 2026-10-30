@@ -240,10 +240,10 @@
   // TIME_SCALE = 1 means no conversion is applied. It is kept as a named
   // constant so the rate can be changed in one place if needed.
   // The artifact simulates at 24 fps and this port renders at 60 Hz: running
-  // 1 tick per step made everything 2.5x faster in real time. TIME_SCALE 0.4
-  // was the original's exact pace; 0.5 keeps the same feel with a touch more
-  // tempo (velocities *0.5, gravity *0.25 — jump height stays identical).
-  var TIME_SCALE = 0.5;
+  // 1 tick per step made everything 2.5x faster in real time. TIME_SCALE 0.75
+  // is the brisk base pace; the SLOWMO pickups bring the whole game down to
+  // the 0.5 feel (0.75 * 2/3) when a Slowmo powerup is used.
+  var TIME_SCALE = 0.75;
   var VEL_SCALE = TIME_SCALE; // 1
   var ACCEL_SCALE = TIME_SCALE * TIME_SCALE; // 1
   var TICKS_TO_STEPS = 1 / TIME_SCALE; // 1
@@ -330,6 +330,16 @@
   };
   GRENADE.throwSpeed *= TIME_SCALE;
   GRENADE.upBias *= TIME_SCALE;
+
+  // Slowmo powerups (extracted WeaponPowerupData): t_time IS the duration in
+  // seconds; the slowmo ramp takes the whole game to ~0.2 in the artifact.
+  // Here the pickup eases gameSpeed to SLOWMO_ITEM_TARGET (2/3 of the base
+  // TIME_SCALE, which feels like the 0.5 the player loves) for t_time seconds
+  // with a 1-second ramp back out.
+  var SLOWMO_ITEM_TARGET = 0.5 / 0.75; // factor over base pace: effective 0.5
+  var SLOWMO_ITEM_RAMP = 24 * ANIM_TICKS_TO_STEPS; // 1 s ramp (extracted 24 ticks)
+  var SLOWMO_05 = { kind: 'powerup', power: 'slowmo', name: 'Slowmo 0.5', time: 5, shape: 'slowmo' };
+  var SLOWMO_10 = { kind: 'powerup', power: 'slowmo', name: 'Slowmo 1.0', time: 10, shape: 'slowmo' };
   // Health pickups (extracted WeaponPowerupData): Ammo IS the heal amount,
   // applied as HP += Ammo on pickup (clamped at 100 by the HP setter)
   // CRATE props (extracted AddBox "CRATE"): 14x14, BodyData hp 40, dynamic
@@ -765,6 +775,7 @@
   var restartTimer = 0; // ROUND_RESTART_FRAMES countdown after a kill
   var botActive = false; // P2 driven by the bot
   var slowmoPhase = null; // { t: frames elapsed } during the round-end slowmo
+  var itemSlowmo = null; // { mode: 'in'|'hold'|'out', t, target, hold } — Slowmo pickup
 
   // ---------- Canvas ----------
   var canvas = document.getElementById('game');
@@ -2859,6 +2870,10 @@
           }
           this.throwable = { ammo: item.weapon.ammo };
           item.taken = true;
+        } else if (kind === 'powerup') {
+          // Slowmo powerup (extracted): walk over it and it activates globally
+          startItemSlowmo(item.weapon.time);
+          item.taken = true;
         } else if (kind === 'health') {
           // isHealth pickup (extracted): HP += Ammo, clamped at 100. Left on the
           // ground while at full health so a medkit is never wasted.
@@ -3211,6 +3226,16 @@
     if (c.shape === 'pills') {
       px(x + 1, y, 8, 6, '#e8e4da'); // pill box
       px(x + 1, y + 2, 8, 2, '#d0453a'); // red band
+    } else if (c.shape === 'slowmo') {
+      ctx.strokeStyle = '#7ab8d8';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(x + 6, y + 3, 5, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.beginPath(); // clock hands
+      ctx.moveTo(x + 6, y + 3); ctx.lineTo(x + 6, y);
+      ctx.moveTo(x + 6, y + 3); ctx.lineTo(x + 8, y + 3);
+      ctx.stroke();
     } else if (c.shape === 'medkit') {
       px(x, y - 1, 12, 8, '#e8e4da'); // kit box
       px(x + 5, y + 1, 2, 4, '#d0453a'); // cross vertical
@@ -3896,7 +3921,7 @@
     weaponRespawnTimer--;
     if (weaponRespawnTimer <= 0) {
       weaponRespawnTimer = 300 + Math.floor(Math.random() * 180);
-      var catalog = [MELEE_WEAPONS.machete, MELEE_WEAPONS.axe, MELEE_WEAPONS.sword, GUNS.pistol, HEALTH_PILLS, HEALTH_MEDKIT];
+      var catalog = [MELEE_WEAPONS.machete, MELEE_WEAPONS.axe, MELEE_WEAPONS.sword, GUNS.pistol, HEALTH_PILLS, HEALTH_MEDKIT, SLOWMO_05, SLOWMO_10];
       var wp = weaponSpawnPoints[Math.floor(Math.random() * weaponSpawnPoints.length)];
       weaponItems.push({
         weapon: catalog[Math.floor(Math.random() * catalog.length)],
@@ -3918,7 +3943,27 @@
     slowmoPhase = { mode: 'in', t: 0 };
   }
 
+  function startItemSlowmo(seconds) {
+    itemSlowmo = { mode: 'in', t: 0, target: SLOWMO_ITEM_TARGET, hold: seconds * FPS };
+  }
+
   function updateSlowmo() {
+    // Slowmo pickup: ramps gameSpeed down, holds, ramps back up
+    if (itemSlowmo) {
+      if (itemSlowmo.mode === 'in') {
+        itemSlowmo.t++;
+        gameSpeed = 1 - (1 - itemSlowmo.target) * (itemSlowmo.t / SLOWMO_ITEM_RAMP);
+        if (itemSlowmo.t >= SLOWMO_ITEM_RAMP) { itemSlowmo.mode = 'hold'; itemSlowmo.t = 0; gameSpeed = itemSlowmo.target; }
+      } else if (itemSlowmo.mode === 'hold') {
+        itemSlowmo.t++;
+        if (itemSlowmo.t >= itemSlowmo.hold) { itemSlowmo.mode = 'out'; itemSlowmo.t = 0; }
+      } else {
+        itemSlowmo.t++;
+        gameSpeed = itemSlowmo.target + (1 - itemSlowmo.target) * (itemSlowmo.t / SLOWMO_ITEM_RAMP);
+        if (itemSlowmo.t >= SLOWMO_ITEM_RAMP) { itemSlowmo = null; gameSpeed = 1; }
+      }
+      return; // the item slowmo owns gameSpeed while active
+    }
     if (!slowmoPhase) return;
     if (slowmoPhase.mode === 'in') {
       slowmoPhase.t++;
@@ -4036,7 +4081,7 @@
 
   function populateWeaponSpawns() {
     // The level's 6 weapon spawn points get a random catalog weapon
-    var catalog = [MELEE_WEAPONS.machete, MELEE_WEAPONS.axe, MELEE_WEAPONS.sword, GUNS.pistol, HEALTH_PILLS, HEALTH_MEDKIT];
+    var catalog = [MELEE_WEAPONS.machete, MELEE_WEAPONS.axe, MELEE_WEAPONS.sword, GUNS.pistol, HEALTH_PILLS, HEALTH_MEDKIT, SLOWMO_05, SLOWMO_10];
     weaponItems.length = 0;
     for (var i = 0; i < weaponSpawnPoints.length; i++) {
       var wp = weaponSpawnPoints[i];
@@ -4943,6 +4988,7 @@
     restartRound: restartRound,
     explodeGrenade: explodeGrenade,
     damageCrate: damageCrate,
+    startItemSlowmo: startItemSlowmo,
     step: updateStep,
     render: render
   };
