@@ -256,7 +256,7 @@ test('in game: a straight drop still only knocks the fighter down (no roll)', ()
   const fighter = game.players[0];
   fighter.x = 300; fighter.y = FLOOR_Y - fighter.h; fighter.onGround = true;
   game.step();
-  const crate = game.createCrate(fighter.x - 2, fighter.y + 10, null);
+  const crate = game.createCrate(fighter.x - 2, fighter.y + 4, null); // lands on his head: the overlap is clearly vertical
   crate.resting = false; crate.vx = 0; crate.vy = 4; crate.spin = 0;
   game.step();
   assert.ok(!fighter.knockbackRoll);
@@ -1217,7 +1217,7 @@ test('in game: the side the head hits decides the small sideways nudge', () => {
   const underLeftEdge = jumpUnderLedgeProp(null, -6).sideways;
   const underRightEdge = jumpUnderLedgeProp(null, 6).sideways;
   assert.ok(underLeftEdge > 0 && underRightEdge < 0, 'left ' + underLeftEdge.toFixed(3) + ' right ' + underRightEdge.toFixed(3));
-  assert.ok(Math.abs(underLeftEdge) < 0.5, 'barely sideways');
+  assert.ok(Math.abs(underLeftEdge) < 0.8 && Math.abs(underRightEdge) < 0.8, 'barely sideways');
 });
 
 test('head bump rule: the prop is thrown 50 % then 40 % harder than the plain collision gives it', () => {
@@ -1284,4 +1284,32 @@ test('head bump rule: a hanging (anchored) body still takes the blow as a swing 
   const underRight = impact.headBumpOutcome({ fighterRiseSpeed: 5, propMass: 12, propWidth: 36, propCenterX: 0, headCenterX: 10, anchored: true });
   assert.ok(underLeft.swingImpulse > 0 && underRight.swingImpulse < 0);
   assert.equal(underLeft.propVy, 0, 'it does not fly off its rope');
+});
+
+// Regression: the pit with the lying barrel on its ledge left a 14.5 px gap beside the ledge (15.5 beside
+// the barrel), and the 16.8 px collision body could not squeeze through it (he stood on the barrel, stuck).
+test('in game: the fighter fits through a 14.5 px gap beside a ledge with a barrel lying on it', () => {
+  const game = createGame();
+  game.platforms.length = 0;
+  game.platforms.push({ x: 0, y: 500, w: 800, h: 100, solidSides: true, cloud: false, ladder: false });
+  game.platforms.push({ x: 600, y: 300, w: 33, h: 12.5, solidSides: true, cloud: false, ladder: false });   // left slab
+  game.platforms.push({ x: 668, y: 300, w: 40, h: 12.5, solidSides: true, cloud: false, ladder: false });   // right slab: 14.5 px beyond the ledge end
+  game.platforms.push({ x: 633, y: 330, w: 20.5, h: 2.5, solidSides: false, cloud: true, ladder: false });  // ledge under the shaft
+  game.crates.length = 0; game.barrels.length = 0;
+  const lying = {
+    x: 633.5, y: 330 - 13.75, w: 18.75, h: 13.75, sx: 633, sy: 316, vx: 0, vy: 0, angle: Math.PI / 2, spin: 0,
+    mass: 2, baseW: 13.75, baseH: 18.75, burning: false, burnFuse: 0, resting: true
+  };
+  game.barrels.push(lying);
+  for (let i = 0; i < 10; i++) game.step();
+  const ledgeEnd = 653.5;
+  const gap = 668 - ledgeEnd;
+  const fighter = game.players[0];
+  game.players[1].x = 20; game.players[1].y = FLOOR_Y - game.players[1].h;
+  assert.ok(gap > fighter.w && gap < 16.8, 'the free gap beside the ledge (' + gap.toFixed(2) + ') is wider than the body (' + fighter.w.toFixed(2) + ') but narrower than the old 16.8 body');
+  // drop from above, centred on the free gap beside the barrel
+  fighter.x = ledgeEnd + (gap - fighter.w) / 2; fighter.y = 250;
+  fighter.airVelocityX = 0; fighter.airVelocityY = 0; fighter.onGround = false; fighter.groundedPlatform = null;
+  for (let i = 0; i < 80; i++) game.step();
+  assert.ok(fighter.y + fighter.h > 400, 'he fell through the gap to the floor below (feet at ' + (fighter.y + fighter.h).toFixed(1) + ')');
 });

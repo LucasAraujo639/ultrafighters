@@ -141,12 +141,12 @@ test('Police Station keeps the extracted collision shapes and dimensions', () =>
   assert.ok(Math.abs(player2.y + player2.h - lowerLeftFloor.y) < 1e-6);
 });
 
-test('fighters use a body 60% of the base size', () => {
+test('fighters use a body 60% of the base size (and a collision body narrower than the artifact frame)', () => {
   const { game } = createGame();
   for (const player of Array.from(game.players)) {
     assert.equal(player.baseW, 28);
     assert.equal(player.baseH, 44);
-    assert.ok(Math.abs(player.w - 28 * 0.6) < 1e-9);
+    assert.ok(Math.abs(player.w - 28 * 0.6 * 0.8) < 1e-9, 'collision width is 80 % of the scaled frame');
     assert.ok(Math.abs(player.h - 44 * 0.6) < 1e-9);
     assert.ok(player.w < player.baseW);
     assert.ok(player.h < player.baseH);

@@ -26,6 +26,12 @@ for (const [name, w, h] of [['pillar 1', 13.5, 40.5], ['pillar 2', 13.5, 42.5]])
     const floorY = beam.y + beam.h + 70;
     game.platforms.push({ x: beam.x - 50, y: floorY, w: 120, h: 50, solidSides: true, shape: 'rect', cloud: false, ladder: false });
     Object.assign(p, { x: beam.x + beam.w / 2 - p.w / 2, y: floorY - p.h, airVelocityX: 0, airVelocityY: 0, onGround: true, groundedPlatform: null });
+    // the map's own block sits where the fighter is stood: remove it so the jump is the only thing under test
+    for (let i = game.platforms.length - 1; i >= 0; i--) {
+      const q = game.platforms[i];
+      const overlapsBody = q.x < p.x + p.w && q.x + q.w > p.x && q.y < p.y + p.h && q.y + q.h > p.y;
+      if (overlapsBody && q !== beam && q.shape === 'rect' && !(q.y === floorY)) game.platforms.splice(i, 1);
+    }
     for (let f = 0; f < 3; f++) game.step();
     p.airVelocityY = -14; p.onGround = false; p.jumping = true;
     let minY = Infinity;

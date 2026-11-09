@@ -1198,6 +1198,10 @@
   var PLAYER_WIDTH = 28;
   var PLAYER_HEIGHT = 44;
   var PLAYER_SIZE_SCALE = 0.6; // the user-requested 40% smaller fighter body
+  // The collision body is narrower than the artifact's 28 px frame (that width
+  // includes the swinging arms): the torso and legs fit through gaps a full-width
+  // box would jam in. Height and the drawn sprite are untouched (it is drawn from the centre).
+  var PLAYER_BODY_WIDTH_SHARE = 0.8;
   var PUNCH_ANIM_FRAMES = Math.round(12 * ANIM_TICKS_TO_STEPS); // PUNCH anim ≈ 12 artifact frames per link
   var PUNCH_RANGE = 16;
   var KICK_COOLDOWN = Math.round(8 * ANIM_TICKS_TO_STEPS); // extracted KickingCooldown = 8 ticks
@@ -1647,7 +1651,7 @@
       propSpin: c.spin || 0,
       propCenterY: c.y + c.h / 2,
       towardFighter: toward,
-      fighterWidth: p.w,
+      fighterWidth: p.baseW * PLAYER_SIZE_SCALE, // his stance, not the narrower collision body: keeps the tipping model calibrated
       fighterHeight: p.h,
       fighterFeetY: p.y + p.h,
       gravity: PLAYER_GRAVITY
@@ -5818,7 +5822,7 @@
     this.y = y;
     this.baseW = this.char.w || PLAYER_WIDTH;
     this.baseH = this.char.h || PLAYER_HEIGHT;
-    this.w = this.baseW * PLAYER_SIZE_SCALE;
+    this.w = this.baseW * PLAYER_SIZE_SCALE * PLAYER_BODY_WIDTH_SHARE;
     this.h = this.baseH * PLAYER_SIZE_SCALE;
 
     // Input binding (e.code values)
