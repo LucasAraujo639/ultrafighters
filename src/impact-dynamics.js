@@ -371,7 +371,28 @@
     };
   }
 
+  // Walking under a prop that only reaches down to his head (two shelves a body
+  // apart, a barrel perched on the upper one). A graze of a couple of pixels is
+  // just his hair under it: he walks on. A deeper one is pressed through with
+  // the head: the prop is nudged up, just enough to clear him, and he keeps going.
+  var HEAD_CLEARANCE_PX = 2.5;  // px of his head inside the prop's underside that still counts as clear
+  var HEAD_PRESS_MAX_PX = 7;    // deeper than this the prop is beside him, not over his head
+  var HEAD_PRESS_MARGIN_PX = 0.8; // extra clearance the nudge gives
+  /** 'none' | 'clear' | 'press' for a head that is `depth` px inside the underside of a prop above it. */
+  function headContact(depth) {
+    if (!(depth > 0) || depth > HEAD_PRESS_MAX_PX) return 'none';
+    return depth <= HEAD_CLEARANCE_PX ? 'clear' : 'press';
+  }
+  /** Upward speed (px/step, negative) that lifts a prop `depth` px (plus a margin) against `gravity`. */
+  function headPressLiftSpeed(depth, gravity) {
+    return -Math.sqrt(2 * gravity * (Math.max(0, depth - HEAD_CLEARANCE_PX) + HEAD_PRESS_MARGIN_PX));
+  }
+
   var api = {
+    HEAD_CLEARANCE_PX: HEAD_CLEARANCE_PX,
+    HEAD_PRESS_MAX_PX: HEAD_PRESS_MAX_PX,
+    headContact: headContact,
+    headPressLiftSpeed: headPressLiftSpeed,
     HEAD_BUMP_RESTITUTION: HEAD_BUMP_RESTITUTION,
     HEAD_BUMP_FORCE_GAIN: HEAD_BUMP_FORCE_GAIN,
     headBumpOutcome: headBumpOutcome,

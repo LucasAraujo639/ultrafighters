@@ -1807,6 +1807,25 @@
     return hitboxApi ? hitboxApi.silhouetteOverlaps(bounds, p.lastDirX || 1, rect) : rectsOverlap(bounds, rect);
   }
 
+  // ---------- Walking under a prop that only reaches his head ----------
+  // impact-dynamics.js headContact: a graze is ignored, a deeper one is pressed
+  // through (the prop is lifted just enough to clear him). Returns true when the
+  // contact is a head contact (so no side block / shove applies).
+  var HEAD_PRESS_MAX_PROP_VY = 1; // px/step: faster than this the prop is dropping onto his head
+  function headPressesProp(p, prop, isBarrel) {
+    if (!impactApi || !impactApi.headContact || isAnchored(prop) || prop.burning) return false;
+    if (prop.y + prop.h / 2 >= p.y) return false;                  // its middle is not above his head: it is beside him
+    if ((prop.vy || 0) > HEAD_PRESS_MAX_PROP_VY) return false;     // a falling prop lands on him, it is not perched over him
+    var contact = impactApi.headContact(prop.y + prop.h - p.y);   // depth of his head inside the underside
+    if (contact === 'none') return false;
+    if (contact === 'press') {
+      var lift = impactApi.headPressLiftSpeed(prop.y + prop.h - p.y, isBarrel ? BARREL_GRAVITY : CRATE_GRAVITY);
+      if (prop.vy > lift) prop.vy = lift;
+      prop.resting = false;
+    }
+    return true;
+  }
+
   // ---------- Jumping into a prop's underside: the head bump ----------
   // The rising fighter's HEAD meets the prop. It is a real collision
   // (impact-dynamics.js headBumpOutcome): the prop is thrown up (lighter, more),
@@ -1867,6 +1886,7 @@
   function crateHitsPlayer(c, p) {
     if (c.dead || p.hp <= 0) return;
     if (!fighterTouchesRect(p, c)) return;
+    if (headPressesProp(p, c, false)) return; // his head under its underside: he walks on, the prop rides up
     // a fighter this prop just crushed is flying clear: the prop must not grab,
     // knock down or re-crush him while the throw plays out
     if (c.lastCrushStep && c.lastCrushStep[p.id] !== undefined && propStepClock - c.lastCrushStep[p.id] <= PROP_CRUSH_IMMUNITY_STEPS) return;
@@ -3706,6 +3726,7 @@
             continue;
           }
           if (!fighterTouchesRect(p, b)) continue;
+          if (headPressesProp(p, b, true)) continue;
           if (b.burning && !isUltraInstinct(p)) {
             p.damage(BARREL_TOUCH_BURN_DAMAGE);
             p.fireFlash = Math.max(p.fireFlash, 4);
@@ -9995,6 +10016,7 @@ this.updateBurst();
         if (!(this.y + this.h > crate2.y + 2)) continue; // beside it, not on top
         var pxb = this.getBounds();
         if (!rectsOverlap(pxb, crate2)) continue;
+        if (headPressesProp(this, crate2, false)) continue; // only his head is under it: no wall
         var wasBeside = prevX < crate2.x + crate2.w && prevX + this.w > crate2.x;
         if (wasBeside) continue; // spawned overlapping; vertical handles it
         if (h > 0) this.x = crate2.x - this.w;

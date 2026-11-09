@@ -1313,3 +1313,60 @@ test('in game: the fighter fits through a 14.5 px gap beside a ledge with a barr
   for (let i = 0; i < 80; i++) game.step();
   assert.ok(fighter.y + fighter.h > 400, 'he fell through the gap to the floor below (feet at ' + (fighter.y + fighter.h).toFixed(1) + ')');
 });
+
+// ---------- walking under a prop that only reaches his head ----------
+
+test('head contact rule: a graze is clear, a deeper one is pressed through, a very deep one is a wall', () => {
+  assert.equal(impact.headContact(0), 'none');
+  assert.equal(impact.headContact(impact.HEAD_CLEARANCE_PX), 'clear');
+  assert.equal(impact.headContact(impact.HEAD_CLEARANCE_PX + 1), 'press');
+  assert.equal(impact.headContact(impact.HEAD_PRESS_MAX_PX + 0.5), 'none');
+  const shallow = impact.headPressLiftSpeed(3, 0.3375);
+  const deep = impact.headPressLiftSpeed(6, 0.3375);
+  assert.ok(shallow < 0 && deep < shallow, 'a deeper press lifts harder (upward speed is negative)');
+});
+
+function walkUnderShelfProp(kind, shelfGap) {
+  const game = arenaGame();
+  game.platforms.length = 0;
+  game.platforms.push({ x: 0, y: 500, w: 800, h: 100, solidSides: true, cloud: false, ladder: false });
+  const lowY = 400;
+  const upY = lowY - shelfGap;
+  game.platforms.push({ x: 300, y: lowY, w: 300, h: 2.5, solidSides: false, cloud: true, ladder: false });
+  game.platforms.push({ x: 300, y: upY, w: 300, h: 2.5, solidSides: false, cloud: true, ladder: false });
+  let prop;
+  if (kind === 'barrel') prop = placeBarrel(game, 440, upY); else prop = game.createCrate(440, upY, kind);
+  for (let i = 0; i < 5; i++) game.step();
+  const fighter = game.players[0];
+  fighter.x = 360; fighter.y = lowY - fighter.h; fighter.lastDirX = 1; fighter.onGround = true; fighter.groundedPlatform = game.platforms[1];
+  fighter.airVelocityX = 0; fighter.airVelocityY = 0;
+  game.__listeners.keydown({ code: 'KeyD', repeat: false, preventDefault() {} });
+  for (let i = 0; i < 200; i++) game.step();
+  game.__listeners.keyup({ code: 'KeyD', preventDefault() {} });
+  return { fighter, prop, upY };
+}
+
+test('in game: a prop perched a body-height above the floor does not block him walking under it (head graze)', () => {
+  const fighterHeight = arenaGame().players[0].h;
+  for (const kind of [null, 'table', 'cementBarrel', 'metalCrate', 'barrel']) {
+    for (const extra of [0.4, 1.4]) { // shelf gap just under the body height: head 0.4 / 1.4 px inside the prop
+      const { fighter } = walkUnderShelfProp(kind, fighterHeight - extra);
+      assert.ok(fighter.x > 520, (kind || 'crate') + ' graze ' + extra + ': walked past it (x=' + fighter.x.toFixed(1) + ')');
+    }
+  }
+});
+
+test('in game: a deeper head contact is pressed through: the prop rises to let him pass and settles back on its shelf', () => {
+  const fighterHeight = arenaGame().players[0].h;
+  for (const kind of [null, 'cementBarrel', 'barrel']) {
+    const { fighter, prop, upY } = walkUnderShelfProp(kind, fighterHeight - 4.4);
+    assert.ok(fighter.x > 520, (kind || 'crate') + ': walked past it (x=' + fighter.x.toFixed(1) + ')');
+    assert.ok(Math.abs(prop.y + prop.h - upY) < 1.5, (kind || 'crate') + ': back on its shelf');
+  }
+});
+
+test('in game: a prop that reaches well below his head is still a wall', () => {
+  const fighterHeight = arenaGame().players[0].h;
+  const { fighter } = walkUnderShelfProp(null, fighterHeight - 12);
+  assert.ok(fighter.x < 440, 'blocked beside it (x=' + fighter.x.toFixed(1) + ')');
+});
