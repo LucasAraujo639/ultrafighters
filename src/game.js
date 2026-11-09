@@ -1206,6 +1206,11 @@
   // The collision body is narrower than the artifact's 28 px frame (that width
   // includes the swinging arms): the torso and legs fit through gaps a full-width
   // box would jam in. Height and the drawn sprite are untouched (it is drawn from the centre).
+  // While rolling the body folds up: the collider is half as tall and 30 % narrower
+  // (feet and centre stay put), so a roll can squeeze through narrow gaps. It
+  // stands back up to full size as soon as there is room above.
+  var ROLL_COLLIDER_HEIGHT_SHARE = 0.5;
+  var ROLL_COLLIDER_WIDTH_SHARE = 0.7;
   var PLAYER_BODY_WIDTH_SHARE = 0.7; // 20 % narrower first, then 50 % more narrowing on top (0.8 -> 0.7 of the frame)
   var PUNCH_ANIM_FRAMES = Math.round(12 * ANIM_TICKS_TO_STEPS); // PUNCH anim ≈ 12 artifact frames per link
   var PUNCH_RANGE = 16;
@@ -7932,6 +7937,39 @@
     return false;
   };
 
+  // Folds the collider while the roll lasts and unfolds it once there is room.
+  // The feet and the horizontal centre never move; the drawn body stays full size
+  // (drawStepped draws from the stored standing dimensions).
+  Player.prototype.syncRollCollider = function () {
+    var folded = this.rollShrunk;
+    if (this.rolling && !folded) {
+      var standingW = this.w, standingH = this.h;
+      this.rollShrunk = { w: standingW, h: standingH };
+      this.w = standingW * ROLL_COLLIDER_WIDTH_SHARE;
+      this.h = standingH * ROLL_COLLIDER_HEIGHT_SHARE;
+      this.x += (standingW - this.w) / 2;
+      this.y += standingH - this.h;
+    } else if (!this.rolling && folded) {
+      var feet = this.y + this.h;
+      var centre = this.x + this.w / 2;
+      var standing = { x: centre - folded.w / 2, y: feet - folded.h, w: folded.w, h: folded.h };
+      if (standingRoomFor(standing)) {
+        this.x = standing.x; this.y = standing.y; this.w = folded.w; this.h = folded.h;
+        this.rollShrunk = null;
+      } // else: stays folded (and can keep moving) until it is clear above him
+    }
+  };
+
+  // True when a full-size body at `rect` overlaps no solid platform.
+  function standingRoomFor(rect) {
+    for (var i = 0; i < platforms.length; i++) {
+      var plat = platforms[i];
+      if (!plat.solidSides || platformIsOneWay(plat) || plat.ladder || plat.glass || plat.elevator) continue;
+      if (rectsOverlap(rect, plat)) return false;
+    }
+    return true;
+  }
+
   Player.prototype.getBounds = function () {
     return { x: this.x, y: this.y, w: this.w, h: this.h };
   };
@@ -9789,6 +9827,7 @@ this.updateBurst();
     var steps = Math.ceil(totalAirVelocity);
     if (steps <= 1) steps = 1;
 
+    this.syncRollCollider(); // the roll folds the collider before this step's collisions
     var h = this.airVelocityX * moveScale;
     var c = this.airVelocityY * moveScale;
     var groundedThisFrame = false;
@@ -11245,9 +11284,16 @@ this.updateBurst();
   // visual-only stair ease: the body is drawn offset from its physics y
   function drawStepped(p, fn) {
     var off = p.stepVis || 0;
-    if (!off) { fn(p); return; }
+    var folded = p.rollShrunk;
+    if (!off && !folded) { fn(p); return; }
+    var saved = { x: p.x, y: p.y, w: p.w, h: p.h };
+    if (folded) {
+      // a rolling body is drawn at its standing size (only the collider is folded), feet and centre in place
+      var centre = p.x + p.w / 2, feet = p.y + p.h;
+      p.w = folded.w; p.h = folded.h; p.x = centre - p.w / 2; p.y = feet - p.h;
+    }
     p.y += off;
-    try { fn(p); } finally { p.y -= off; }
+    try { fn(p); } finally { p.x = saved.x; p.y = saved.y; p.w = saved.w; p.h = saved.h; }
   }
 
   function drawUiGhost(p) {

@@ -53,6 +53,9 @@ function emptyArena(game) {
 // memory (node crashed with SIGSEGV), so they share one game and reset it.
 let sharedGameInstance = null;
 function resetFighter(fighter) {
+  if (fighter.rollShrunk) { fighter.w = fighter.rollShrunk.w; fighter.h = fighter.rollShrunk.h; fighter.rollShrunk = null; }
+  fighter.sprintEnergy = 100; fighter.rollCooldown = 0; fighter.shortDiveTimer = 0; fighter.sprinting = false;
+  fighter.diving = false; fighter.rolling = false; fighter.rollFrame = 0; fighter.rollFromDive = false; fighter.crouching = false;
   fighter.hp = 100; fighter.gibbed = false;
   fighter.knockbackRoll = false; fighter.knockbackRollFrame = 0; fighter.knockbackRollAngle = 0;
   fighter.knockedDown = false; fighter.rolling = false; fighter.falling = false; fighter.jumping = false;
@@ -60,9 +63,14 @@ function resetFighter(fighter) {
   fighter.airVelocityX = 0; fighter.airVelocityY = 0;
   fighter.onGround = true; fighter.groundedCrate = null; fighter.groundedBarrel = null; fighter.groundedPlatform = null;
 }
-function arenaGame() {
-  if (!sharedGameInstance) sharedGameInstance = createGame();
-  const game = sharedGameInstance;
+let rollGameInstance = null; // the roll tests drive the keyboard: they get their own game so no key or state leaks in or out
+function arenaGame(own) {
+  let game;
+  if (own) { if (!rollGameInstance) rollGameInstance = createGame(); game = rollGameInstance; }
+  else { if (!sharedGameInstance) sharedGameInstance = createGame(); game = sharedGameInstance; }
+  for (const code of ['KeyA', 'KeyD', 'KeyW', 'KeyS', 'ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown']) game.__listeners.keyup({ code, preventDefault() {} }); // no key held over from an earlier test
+  if (own) for (let i = 0; i < 12; i++) game.step(); // let the double-tap sprint window of a released key expire
+  if (game.roundOver) game.restartRound(); // an earlier test may have killed a fighter: leave the slow motion / result screen
   emptyArena(game);
   for (const list of [game.weaponItems, game.explosions, game.grenades, game.gore, game.flames, game.propFragments, game.barrelDebris]) {
     if (list) list.length = 0;
@@ -1369,4 +1377,85 @@ test('in game: a prop that reaches well below his head is still a wall', () => {
   const fighterHeight = arenaGame().players[0].h;
   const { fighter } = walkUnderShelfProp(null, fighterHeight - 12);
   assert.ok(fighter.x < 440, 'blocked beside it (x=' + fighter.x.toFixed(1) + ')');
+});
+
+// ---------- rolling folds the collider ----------
+
+function startRoll(game, runSteps) {
+  const keys = game.__listeners;
+  keys.keydown({ code: 'KeyD', repeat: false, preventDefault() {} });
+  for (let i = 0; i < runSteps; i++) game.step();
+  keys.keydown({ code: 'KeyS', repeat: false, preventDefault() {} });
+  game.step();
+  game.step();
+  keys.keyup({ code: 'KeyS', preventDefault() {} });
+}
+
+const SLAB_X = 300;
+function rollArena(tunnelHeight, slabWidth) {
+  const game = arenaGame(true);
+  if (tunnelHeight) game.platforms.push({ x: SLAB_X, y: FLOOR_Y - tunnelHeight - 40, w: slabWidth, h: 40, solidSides: true, cloud: false, ladder: false });
+  const fighter = game.players[0];
+  fighter.x = 200; fighter.y = FLOOR_Y - fighter.h; fighter.lastDirX = 1;
+  fighter.onGround = true; fighter.groundedPlatform = game.platforms[0];
+  fighter.rollCooldown = 0; fighter.shortDiveTimer = 0;
+  for (let i = 0; i < 3; i++) game.step();
+  return { game, fighter };
+}
+const RUN_UP_STEPS = 75; // from x=200 to ~14 px before the tunnel mouth: a roll covers ~30 px
+
+test('in game: a roll folds the collider to half height and 70 % width, feet and centre in place, and unfolds after', () => {
+  const { game, fighter } = rollArena(0);
+  const standing = { w: fighter.w, h: fighter.h };
+  startRoll(game, 10);
+  const folded = { w: fighter.w, h: fighter.h, feet: fighter.y + fighter.h };
+  assert.ok(fighter.rolling, 'the roll started');
+  assert.ok(Math.abs(folded.h - standing.h * 0.5) < 1e-9, 'half the height');
+  assert.ok(Math.abs(folded.w - standing.w * 0.7) < 1e-9, '70 % of the width');
+  assert.ok(Math.abs(folded.feet - FLOOR_Y) < 1e-6, 'feet stay on the floor');
+  game.__listeners.keyup({ code: 'KeyD', preventDefault() {} });
+  for (let i = 0; i < 60; i++) game.step();
+  assert.ok(!fighter.rolling);
+  assert.ok(Math.abs(fighter.h - standing.h) < 1e-9 && Math.abs(fighter.w - standing.w) < 1e-9, 'back to full size');
+  assert.ok(Math.abs(fighter.y + fighter.h - FLOOR_Y) < 1e-6, 'still on the floor');
+});
+
+test('in game: a roll slips under a 15 px slab he cannot walk under, and stands up on the far side', () => {
+  const { game, fighter } = rollArena(15, 30); // 15 px: lower than his 22 px body, higher than the folded 11 px
+  const standingH = fighter.h;
+  startRoll(game, RUN_UP_STEPS);
+  let reached = fighter.x;
+  for (let i = 0; i < 300; i++) { game.step(); reached = Math.max(reached, fighter.x); }
+  game.__listeners.keyup({ code: 'KeyD', preventDefault() {} });
+  assert.ok(reached > 400, 'came out the far side (x=' + reached.toFixed(1) + ')');
+  for (let i = 0; i < 30; i++) game.step();
+  assert.ok(Math.abs(fighter.h - standingH) < 1e-9, 'standing again in the open');
+
+  // walking into the same slab is blocked
+  const walker = rollArena(15, 30);
+  walker.game.__listeners.keydown({ code: 'KeyD', repeat: false, preventDefault() {} });
+  let walked = walker.fighter.x;
+  for (let i = 0; i < 400; i++) { walker.game.step(); walked = Math.max(walked, walker.fighter.x); }
+  assert.ok(walked < SLAB_X, 'walking stops at the slab (x=' + walked.toFixed(1) + ')');
+});
+
+test('in game: a gap lower than the folded body (8 px) is still closed to a roll', () => {
+  const { game, fighter } = rollArena(8, 30);
+  startRoll(game, RUN_UP_STEPS);
+  let reached = fighter.x;
+  for (let i = 0; i < 200; i++) { game.step(); reached = Math.max(reached, fighter.x); }
+  assert.ok(reached < SLAB_X + 1, 'blocked at the mouth (x=' + reached.toFixed(1) + ')');
+});
+
+test('in game: a roll that ends under a low ceiling stays folded until there is room to stand', () => {
+  const { game, fighter } = rollArena(15, 80);
+  startRoll(game, RUN_UP_STEPS);
+  let endedInside = false;
+  for (let i = 0; i < 100 && !endedInside; i++) {
+    game.step();
+    if (!fighter.rolling && fighter.x > SLAB_X + 5 && fighter.x < SLAB_X + 80) endedInside = true;
+  }
+  assert.ok(endedInside, 'the roll ended inside the tunnel (x=' + fighter.x.toFixed(1) + ')');
+  assert.ok(fighter.h < 15, 'still folded (' + fighter.h.toFixed(1) + ') under the ceiling');
+  assert.ok(Math.abs(fighter.y + fighter.h - FLOOR_Y) < 1e-6);
 });
