@@ -1,0 +1,4 @@
+- **Arquitectura Modular y Desacoplada:** Separa estrictamente la lógica de negocio (físicas, estados de salud, colisiones) de la renderización de sprites y la gestión de entradas de teclado. Evita código acoplado en clases monolíticas.
+- **Clean Code & Naming:** Utiliza nombres de variables, funciones y eventos descriptivos y autómaticos (evita números mágicos o abreviaturas crípticas; usa constantes o enums para los estados de transformación y cooldowns).
+- **Manejo de Estados (State Machine):** Implementa las transiciones de transformación (SSJ, SSJ2, UI) y los estados del jugador mediante una máquina de estados limpia y predecible para evitar condiciones de carrera o bugs de inputs cruzados.
+- **Optimización de Rendimiento:** Asegúrate de que los bucles de partículas, colisiones y reproducción de audio no generen fugas de memoria (*memory leaks*) ni sobrecarguen el ciclo de renderizado por fotograma.
