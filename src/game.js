@@ -1206,7 +1206,7 @@
   // The collision body is narrower than the artifact's 28 px frame (that width
   // includes the swinging arms): the torso and legs fit through gaps a full-width
   // box would jam in. Height and the drawn sprite are untouched (it is drawn from the centre).
-  var PLAYER_BODY_WIDTH_SHARE = 0.8;
+  var PLAYER_BODY_WIDTH_SHARE = 0.7; // 20 % narrower first, then 50 % more narrowing on top (0.8 -> 0.7 of the frame)
   var PUNCH_ANIM_FRAMES = Math.round(12 * ANIM_TICKS_TO_STEPS); // PUNCH anim ≈ 12 artifact frames per link
   var PUNCH_RANGE = 16;
   var KICK_COOLDOWN = Math.round(8 * ANIM_TICKS_TO_STEPS); // extracted KickingCooldown = 8 ticks

@@ -146,7 +146,7 @@ test('fighters use a body 60% of the base size (and a collision body narrower th
   for (const player of Array.from(game.players)) {
     assert.equal(player.baseW, 28);
     assert.equal(player.baseH, 44);
-    assert.ok(Math.abs(player.w - 28 * 0.6 * 0.85 * 0.8) < 1e-9, 'collision width is 80 % of the scaled frame (scaled 0.6, reduced 15 %)');
+    assert.ok(Math.abs(player.w - 28 * 0.6 * 0.85 * 0.7) < 1e-9, 'collision width is 70 % of the scaled frame (scaled 0.6, reduced 15 %)');
     assert.ok(Math.abs(player.h - 44 * 0.6 * 0.85) < 1e-9);
     assert.ok(player.w < player.baseW);
     assert.ok(player.h < player.baseH);
