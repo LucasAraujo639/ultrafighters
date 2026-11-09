@@ -371,21 +371,7 @@
     };
   }
 
-  // Walking or running into a prop drags it along as far as his legs can push:
-  // the push force is a multiple of his own weight, so a light crate follows
-  // his stride, a barrel creeps and a very heavy prop does not move at all
-  // (the prop's own floor friction, applied every step, eats whatever the push
-  // does not overcome). The prop never goes faster than he does.
-  var WALK_PUSH_FORCE_GRAVITIES = 1.6; // push force in fighter weights
-  function walkingPushSpeed(input) {
-    var accel = WALK_PUSH_FORCE_GRAVITIES * FIGHTER_MASS * input.gravity / input.propMass;
-    var current = Math.max(0, input.direction * input.propVx);
-    return input.direction * Math.min(Math.abs(input.fighterSpeed), current + accel);
-  }
-
   var api = {
-    WALK_PUSH_FORCE_GRAVITIES: WALK_PUSH_FORCE_GRAVITIES,
-    walkingPushSpeed: walkingPushSpeed,
     HEAD_BUMP_RESTITUTION: HEAD_BUMP_RESTITUTION,
     HEAD_BUMP_FORCE_GAIN: HEAD_BUMP_FORCE_GAIN,
     headBumpOutcome: headBumpOutcome,

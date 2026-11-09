@@ -1229,41 +1229,19 @@ test('head bump rule: the prop is thrown 50 % then 40 % harder than the plain co
 
 // ---------- walking push, dense falling props, rigid table, hanging headbutt ----------
 
-test('walking push rule: light props follow his stride, never faster than he walks; heavy ones are overcome by friction', () => {
-  const base = { propVx: 0, direction: 1, fighterSpeed: 1.1, gravity: 0.3375 };
-  const crate = impact.walkingPushSpeed(Object.assign({}, base, { propMass: 1 }));
-  assert.ok(crate > 0 && crate <= 1.1, 'a crate picks up speed, capped by his walking speed');
-  let speed = 0;
-  for (let i = 0; i < 20; i++) speed = impact.walkingPushSpeed(Object.assign({}, base, { propMass: 1, propVx: speed }));
-  assert.equal(speed, 1.1, 'and reaches exactly his speed');
-  const heavyPush = impact.walkingPushSpeed(Object.assign({}, base, { propMass: 5.6 }));
-  assert.ok(heavyPush < crate / 4, 'a metal crate gains far less per step than a crate');
-  const left = impact.walkingPushSpeed({ propVx: 0, direction: -1, fighterSpeed: 1.1, propMass: 1, gravity: 0.3375 });
-  assert.ok(left < 0, 'pushing left drags it left');
-});
-
-function walkIntoProp(kind) {
-  const game = arenaGame();
-  const fighter = game.players[0];
-  const prop = settledCrate(game, 400, kind);
-  fighter.x = prop.x - fighter.w - 2; fighter.y = FLOOR_Y - fighter.h; fighter.lastDirX = 1;
-  fighter.onGround = true; fighter.groundedPlatform = game.platforms[0];
-  const startX = prop.x;
-  return { game, fighter, prop, startX };
-}
-
-test('in game: walking into a crate drags it along; a metal crate does not budge', () => {
-  for (const [kind, expectMoves] of [[null, true], ['table', true], ['metalCrate', false]]) {
-    const { game, fighter, prop, startX } = walkIntoProp(kind);
-    const listeners = game.__listeners;
-    assert.ok(listeners, 'the test game exposes its key listeners');
-    listeners.keydown({ code: 'KeyD', repeat: false, preventDefault() {} });
+test('in game: walking into a prop never drags it: only blows, blasts and headbutts move a resting prop', () => {
+  for (const kind of [null, 'table', 'cementBarrel', 'metalCrate']) {
+    const game = arenaGame();
+    const fighter = game.players[0];
+    const prop = settledCrate(game, 400, kind);
+    fighter.x = prop.x - fighter.w - 2; fighter.y = FLOOR_Y - fighter.h; fighter.lastDirX = 1;
+    fighter.onGround = true; fighter.groundedPlatform = game.platforms[0];
+    const startX = prop.x;
+    game.__listeners.keydown({ code: 'KeyD', repeat: false, preventDefault() {} });
     for (let i = 0; i < 80; i++) game.step();
-    listeners.keyup({ code: 'KeyD', preventDefault() {} });
-    const dragged = prop.x - startX;
-    if (expectMoves) assert.ok(dragged > 25, (kind || 'crate') + ' dragged ' + dragged.toFixed(1) + ' px');
-    else assert.ok(dragged < 8, 'metal crate dragged only ' + dragged.toFixed(1) + ' px');
-    assert.ok(fighter.x + fighter.w <= prop.x + 0.01, 'he never ends up inside it');
+    game.__listeners.keyup({ code: 'KeyD', preventDefault() {} });
+    assert.ok(Math.abs(prop.x - startX) < 0.5, (kind || 'crate') + ' moved ' + (prop.x - startX).toFixed(2) + ' px');
+    assert.ok(fighter.x + fighter.w <= prop.x + 0.01, 'he stays outside it');
   }
 });
 

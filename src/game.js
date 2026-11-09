@@ -1611,28 +1611,6 @@
     }
   }
 
-  // Walking or running into a resting prop drags it along (impact-dynamics.js
-  // walkingPushSpeed): a light crate follows his stride, a barrel creeps, a
-  // metal crate does not budge. Only while he is on his feet, driving into it.
-  var WALK_PUSH_MIN_SPEED = 0.1;     // px/step: standing still against it pushes nothing
-  var WALK_PUSH_MAX_PROP_VY = 0.5;   // px/step: a prop that is falling or hopping is not being pushed
-  function pushPropByWalking(p, prop, isBarrel) {
-    if (!impactApi || !impactApi.walkingPushSpeed || isAnchored(prop) || prop.burning) return;
-    if (!p.onGround || p.knockedDown || p.rolling || p.knockbackRoll || p.hp <= 0) return;
-    if (Math.abs(prop.vy || 0) > WALK_PUSH_MAX_PROP_VY) return;
-    var direction = (p.x + p.w / 2 < prop.x + prop.w / 2) ? 1 : -1; // he pushes it away from himself
-    var driving = (p.airVelocityX || 0) * direction;
-    if (driving < WALK_PUSH_MIN_SPEED) return;
-    prop.vx = impactApi.walkingPushSpeed({
-      propVx: prop.vx || 0,
-      direction: direction,
-      fighterSpeed: driving,
-      propMass: isBarrel ? BARREL_MASS : (prop.mass || CRATE_MASS),
-      gravity: isBarrel ? BARREL_GRAVITY : CRATE_GRAVITY
-    });
-    prop.resting = false;
-  }
-
   // A prop shoves a fighter it overlaps out of its side. The side is the one
   // the fighter was on BEFORE the prop moved this step (judged from the prop's
   // previous position), so a fast prop can never "pass" his centre and spit
@@ -1994,8 +1972,7 @@
         shovePlayerBesideProp(p, c);
       }
     } else {
-      // lateral contact: he drags it along as far as his legs push, then it shoves him flush
-      pushPropByWalking(p, c, false);
+      // lateral contact: the crate shoves him aside (no knockdown)
       shovePlayerBesideProp(p, c);
     }
   }
@@ -3746,7 +3723,6 @@
             // the drop slides him clear at once (vertical fall, bounded by the arena edges)
             p.x = Math.max(0, Math.min(GAME_WIDTH - p.w, (p.x + p.w / 2 < b.x + b.w / 2) ? b.x - p.w : b.x + b.w));
           } else {
-            pushPropByWalking(p, b, true);
             shovePlayerBesideProp(p, b); // lateral contact: bounded shove, never through a wall
           }
           if (barrelCrushes) {
@@ -10001,9 +9977,9 @@ this.updateBurst();
           }
         }
       }
-      // Footsteps drag a crate only as far as his legs can push it
-      // (pushPropByWalking: a light crate follows his stride, a metal crate
-      // never budges); blows and explosions move it the rest of the way.
+      // Crates are immovable to footsteps: the fighter runs against them
+      // (the walk animation keeps playing) but they never budge. Only hits
+      // (punch, kick, jump kick), explosions and a headbutt move a crate.
       for (var ci2 = 0; ci2 < crates.length; ci2++) {
         var crate2 = crates[ci2];
         if (crate2.dead) continue;
@@ -10012,7 +9988,6 @@ this.updateBurst();
         if (!rectsOverlap(pxb, crate2)) continue;
         var wasBeside = prevX < crate2.x + crate2.w && prevX + this.w > crate2.x;
         if (wasBeside) continue; // spawned overlapping; vertical handles it
-        pushPropByWalking(this, crate2, false);
         if (h > 0) this.x = crate2.x - this.w;
         else if (h < 0) this.x = crate2.x + crate2.w;
         // Crates are solid obstacles: launched/diving/long-fall bodies tumble
