@@ -12,7 +12,7 @@
   var PLAYER_RUN_SPEED = 1.7 * VEL_SCALE;
   var AIR_CONTROL_FACTOR = 0.8;
   var AIR_FALL_MIN = 0.1 * VEL_SCALE;
-  var FALL_TRIGGER_SPEED = 8.5 * VEL_SCALE;
+  var FALL_TRIGGER_SPEED = 9.5625 * VEL_SCALE;
   var FALL_ON_PLAYER_DAMAGE = 6;
 
   var CLOUD_DROP_WINDOW = 15;
@@ -360,7 +360,7 @@
         this.shortDiveTimer = 0;
         this.drainEnergy(ROLL_ENERGY_COST);
         this.startDive(true);
-      } else if (this.running) {
+      } else if (dir !== 0) {
         this.drainEnergy(ROLL_ENERGY_COST);
         this.rolling = true;
         this.rollFrame = 0;
@@ -421,7 +421,7 @@
           if (this.airVelocityX < -maxAirX) this.airVelocityX = -maxAirX;
         }
       }
-    } else if (this.onGround) {
+    } else if (this.onGround || (controllable && !this.wallJumping && !this.climbing)) {
       this.airVelocityX = 0;
     }
 
