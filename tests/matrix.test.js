@@ -211,7 +211,7 @@ test('J (hold) engages bullet time: the world crawls, the avatar does not', () =
   const d1 = p1.x - x1; // the crawling enemy
   const d2 = p2.x - x2; // the real-time avatar
   assert.ok(d1 > 0 && d1 < d2 * 0.7, 'the world crawls at the slowed pace');
-  assert.ok(d2 >= 20 * 1.122 * 0.95, 'the avatar keeps their real-time run speed');
+  assert.ok(d2 >= 20 * 1.122 * 0.85 * 0.95, 'the avatar keeps their real-time run speed');
   assert.ok(p2.matrixBtOn, 'bullet time stays on while J is held');
 
   keyUp(listeners, 'KeyJ');

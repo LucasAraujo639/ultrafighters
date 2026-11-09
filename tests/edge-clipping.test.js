@@ -24,7 +24,8 @@ for (const overlapDepth of SHALLOW_OVERLAPS) {
       for (const b of game.barrels) b.dead = true;
       const pillar = game.platforms.find((q) => q.shape === 'rect' && q.w === 13.5 && q.h === 40.5);
       const player = game.players[0];
-      const startX = side === 'left' ? pillar.x - player.w + overlapDepth : pillar.x + pillar.w - overlapDepth;
+      const depth = Math.min(overlapDepth, player.w - 1); // a body narrower than the overlap would sit fully inside
+      const startX = side === 'left' ? pillar.x - player.w + depth : pillar.x + pillar.w - depth;
       Object.assign(player, { x: startX, y: pillar.y + 10, airVelocityX: 0, airVelocityY: 0, onGround: false, groundedPlatform: null });
       game.step();
       const penetrationX = Math.min(player.x + player.w, pillar.x + pillar.w) - Math.max(player.x, pillar.x);

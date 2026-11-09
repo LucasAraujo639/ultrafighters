@@ -146,8 +146,8 @@ test('fighters use a body 60% of the base size (and a collision body narrower th
   for (const player of Array.from(game.players)) {
     assert.equal(player.baseW, 28);
     assert.equal(player.baseH, 44);
-    assert.ok(Math.abs(player.w - 28 * 0.6 * 0.8) < 1e-9, 'collision width is 80 % of the scaled frame');
-    assert.ok(Math.abs(player.h - 44 * 0.6) < 1e-9);
+    assert.ok(Math.abs(player.w - 28 * 0.6 * 0.85 * 0.8) < 1e-9, 'collision width is 80 % of the scaled frame (scaled 0.6, reduced 15 %)');
+    assert.ok(Math.abs(player.h - 44 * 0.6 * 0.85) < 1e-9);
     assert.ok(player.w < player.baseW);
     assert.ok(player.h < player.baseH);
   }
@@ -533,7 +533,7 @@ test('a great-height drift into a wall still tumbles (long-free-fall grade)', ()
   // 260 px drop drifting right with the direction held: the wide gap makes
   // the face arrive late, so the vertical speed crosses the free-fall bar
   // well before contact — a real high-impact slam, not a jump drift.
-  resetPlayer(faller, wall.x - faller.w - 80, floor.y - faller.h - 260, false); // gap scaled with the brisker air drift
+  resetPlayer(faller, wall.x - faller.w - 68, floor.y - faller.h - 260, false); // gap scaled with the air drift (15 % slower fighter)
   faller.airVelocityY = 0.5;
   faller.lastDirX = 1;
   keyDown(listeners, 'KeyD'); // drift INTO the wall face
@@ -1129,7 +1129,7 @@ test('the extracted circle provides real top-surface collisions', () => {
   const player = game.players[0];
   const circle = Array.from(game.platforms).find((platform) => platform.shape === 'circle');
 
-  resetPlayer(player, 7, 300, false);
+  resetPlayer(player, 15.4 - player.w / 2, 300, false); // keeps the body centred where the full-size fighter stood
   for (let frame = 0; frame < 60 && !player.onGround; frame++) game.step();
   assert.equal(player.groundedPlatform, circle);
   assert.ok(Math.abs(player.y + player.h - (circle.cy - circle.radius)) < 1e-6);
@@ -1385,7 +1385,7 @@ test('double-tapping a movement direction sprints at twice the run speed', () =>
   game.step(); // re-press inside the window
 
   assert.equal(player.sprinting, true, 'the double-tap activates the sprint');
-  assert.ok(Math.abs(player.airVelocityX - 2.244) < 1e-9, 'RunSpeed is doubled while sprinting');
+  assert.ok(Math.abs(player.airVelocityX - 2.244 * 0.85) < 1e-9, 'RunSpeed is doubled while sprinting');
   assert.ok(player.shortDiveTimer > 0, 'the double-tap also arms the short dive');
 
   // Releasing a sprint and pressing again re-sprints immediately.
@@ -1429,7 +1429,7 @@ test('a slow re-press does not sprint', () => {
   game.step();
 
   assert.equal(player.sprinting, false);
-  assert.ok(Math.abs(player.airVelocityX - 1.122) < 1e-9, 'it stays a normal run');
+  assert.ok(Math.abs(player.airVelocityX - 1.122 * 0.85) < 1e-9, 'it stays a normal run');
 });
 
 test('Shift no longer activates the sprint', () => {
@@ -1444,7 +1444,7 @@ test('Shift no longer activates the sprint', () => {
   for (let frame = 0; frame < 5; frame++) game.step();
 
   assert.equal(player.sprinting, false);
-  assert.ok(Math.abs(player.airVelocityX - 1.122) < 1e-9);
+  assert.ok(Math.abs(player.airVelocityX - 1.122 * 0.85) < 1e-9);
 });
 
 test('walk and sprint use the tuned per-step pace at 60 Hz', () => {
@@ -1454,13 +1454,13 @@ test('walk and sprint use the tuned per-step pace at 60 Hz', () => {
   resetPlayer(player, 120, floor.y - player.h, true);
   player.groundedPlatform = floor;
 
-  // TIME_SCALE 0.75, RUN_SPEED_BOOST 1.1*0.8: 1.7*0.75*0.88 px/step at 60 Hz => 67.32 px/s
+  // TIME_SCALE 0.75, RUN_SPEED_BOOST 1.1*0.8, fighter reduction 0.85: 1.7*0.75*0.88*0.85 px/step at 60 Hz
   const startX = player.x;
   keyDown(listeners, 'KeyD');
   for (let frame = 0; frame < 60; frame++) game.step();
   assert.ok(
-    Math.abs(player.x - startX - 67.32) < 0.01,
-    'one second of walking covers 1.122 px/step * 60 steps'
+    Math.abs(player.x - startX - 67.32 * 0.85) < 0.01,
+    'one second of walking covers 1.122 * 0.85 px/step * 60 steps'
   );
 
   // Sprint is 2x run speed and drains 1.2*0.75 per step:
@@ -2879,7 +2879,7 @@ test('a long free fall crashing into a wall side tumbles (requested trigger 3)',
   // Wide gap: the face must arrive LATE, when the fall speed already crossed
   // the free-fall bar (~76 px of drop). A short gap makes the contact a
   // routine jump-drift touch, which never tumbles (user bug report).
-  resetPlayer(victim, 320 - victim.w - 64, 300, false); // airborne high up, feet ~326
+  resetPlayer(victim, 320 - victim.w - 54, 300, false); // airborne high up, feet ~326
   victim.lastDirX = 1;
 
   keyDown(listeners, 'KeyD'); // the body drifts INTO the tower face

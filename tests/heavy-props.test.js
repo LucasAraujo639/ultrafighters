@@ -230,6 +230,7 @@ test('table: breaks into three non-solid wooden fragments that vanish after 20 s
   // a fighter standing in them is not moved or blocked
   const p = game.players[0];
   placeFighterOnFloor(game, p, cx - p.w / 2);
+  p.y = table.y + table.h - p.h; // stand on the same floor the table stood on
   const startX = p.x;
   for (let i = 0; i < 5; i++) game.step();
   assert.ok(Math.abs(p.x - startX) < 0.5);

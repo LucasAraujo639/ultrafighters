@@ -373,6 +373,9 @@
   // the 0.5 feel (0.75 * 2/3) when a Slowmo powerup is used.
   var TIME_SCALE = 0.75;
   var VEL_SCALE = TIME_SCALE; // 0.75
+  // The original fighter is 15 % smaller and 15 % slower (walk, run, sprint and jump).
+  // One factor drives both so size and pace stay in proportion.
+  var FIGHTER_REDUCTION = 0.85;
   var ACCEL_SCALE = TIME_SCALE * TIME_SCALE; // 0.5625
   var TICKS_TO_STEPS = 1 / TIME_SCALE; // 1
 
@@ -382,14 +385,16 @@
   // HEIGHT and simply takes 1 / JUMP_TIME_FACTOR longer to rise and fall.
   // Ragdoll falls, crashes and knockbacks keep the plain PLAYER_GRAVITY.
   var JUMP_TIME_FACTOR = 0.85;
-  var PLAYER_JUMP_GRAVITY = PLAYER_GRAVITY * JUMP_TIME_FACTOR * JUMP_TIME_FACTOR;
-  var PLAYER_JUMP_POWER = -5 * VEL_SCALE * JUMP_TIME_FACTOR; // -5 px/tick -> -5 px/step
-  var PLAYER_JUMP_PUSH_POWER = -0.7 * ACCEL_SCALE * JUMP_TIME_FACTOR * JUMP_TIME_FACTOR; // -0.7 px/tick per tick -> -0.7 px/step^2
+  // The reduction slows the jump by its factor and, with the lower power, lowers
+  // the arc in proportion to the smaller body (same airtime: gravity scales with it).
+  var PLAYER_JUMP_GRAVITY = PLAYER_GRAVITY * JUMP_TIME_FACTOR * JUMP_TIME_FACTOR * FIGHTER_REDUCTION;
+  var PLAYER_JUMP_POWER = -5 * VEL_SCALE * JUMP_TIME_FACTOR * FIGHTER_REDUCTION; // -5 px/tick -> -5 px/step
+  var PLAYER_JUMP_PUSH_POWER = -0.7 * ACCEL_SCALE * JUMP_TIME_FACTOR * JUMP_TIME_FACTOR * FIGHTER_REDUCTION; // -0.7 px/tick per tick -> -0.7 px/step^2
   var PLAYER_JUMP_PUSH_TIME = 4 * TICKS_TO_STEPS; // 4 ticks -> 4 steps
   // Base run speed eased down 25% from the extracted 1.7 (requested). Sprint
   // stays 2x this value, so both paces drop by the same proportion.
   var RUN_SPEED_BOOST = 1.1 * 0.8; // walk AND run 20% slower (sprint stays 2x the walk)
-  var PLAYER_RUN_SPEED = 1.7 * VEL_SCALE * RUN_SPEED_BOOST; // extracted RunSpeed (1.7 px/tick) x boost
+  var PLAYER_RUN_SPEED = 1.7 * VEL_SCALE * RUN_SPEED_BOOST * FIGHTER_REDUCTION; // extracted RunSpeed (1.7 px/tick) x boost x reduction
   var AIR_CONTROL_FACTOR = 0.8; // proportional to RunSpeed, so it scales itself
   var AIR_FALL_MIN = 0.1 * VEL_SCALE; // 0.1 px/step
   var FALL_TRIGGER_SPEED = 9.5625 * VEL_SCALE; // 10.625 * 0.9
@@ -1197,7 +1202,7 @@
   // ---------- Constants (design choices) ----------
   var PLAYER_WIDTH = 28;
   var PLAYER_HEIGHT = 44;
-  var PLAYER_SIZE_SCALE = 0.6; // the user-requested 40% smaller fighter body
+  var PLAYER_SIZE_SCALE = 0.6 * FIGHTER_REDUCTION; // the requested 40% smaller fighter body, then 15 % smaller again
   // The collision body is narrower than the artifact's 28 px frame (that width
   // includes the swinging arms): the torso and legs fit through gaps a full-width
   // box would jam in. Height and the drawn sprite are untouched (it is drawn from the centre).

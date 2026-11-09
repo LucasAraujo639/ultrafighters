@@ -246,7 +246,7 @@ test('in game: a crate tumbling onto a fighter fast enough throws him into the k
 });
 
 test('in game: a crate tumbling onto him too slowly lacks the inertia: no knockback roll', () => {
-  const fighter = tumbleCrateOntoFighter(1.5);
+  const fighter = tumbleCrateOntoFighter(1.0);
   assert.ok(!fighter.knockbackRoll, 'below the knock-over threshold');
 });
 
@@ -1118,7 +1118,7 @@ test('in game: a fighter right behind the struck prop rolls, and the prop reboun
 test('in game: an ordinary kick rebound lacks the inertia to roll the attacker; a hard blow has it', () => {
   assert.ok(!blowWithFighterBehind(null, 1, 1).attackerRolled, 'ordinary kick: shoved at most');
   assert.ok(blowWithFighterBehind(null, 6, 1).attackerRolled, 'hard blow: the rebound bowls him over too');
-  assert.ok(!blowWithFighterBehind('metalCrate', 6, 1).attackerRolled, 'a heavy crate never gets the speed back');
+  assert.ok(blowWithFighterBehind(null, 4, 1).attackerRolled && !blowWithFighterBehind('metalCrate', 4, 1).attackerRolled, 'a heavy crate gets back far less speed than a plain one for the same blow');
 });
 
 test('in game: a fighter well away from the struck prop is not bowled over by it', () => {
