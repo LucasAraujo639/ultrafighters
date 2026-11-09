@@ -351,7 +351,13 @@
   function headBumpOutcome(input) {
     var fighterMass = input.fighterMass || FIGHTER_MASS;
     var rise = Math.max(0, input.fighterRiseSpeed);
-    if (input.anchored || !(input.propMass > 0)) return { propVx: 0, propVy: 0, fighterRise: 0, offsetShare: 0 };
+    var half0 = Math.max(input.propWidth / 2, 1e-6);
+    var share0 = Math.max(-1, Math.min(1, (input.propCenterX - input.headCenterX) / half0));
+    if (input.anchored || !(input.propMass > 0)) {
+      // it cannot fly off, but a hanging body still takes the blow as a swing
+      return { propVx: 0, propVy: 0, fighterRise: 0, offsetShare: share0,
+        swingImpulse: share0 * rise * fighterMass * HEAD_BUMP_SIDE_RATIO * HEAD_BUMP_FORCE_GAIN };
+    }
     var totalMass = fighterMass + input.propMass;
     var propUp = (1 + HEAD_BUMP_RESTITUTION) * fighterMass * rise / totalMass * HEAD_BUMP_FORCE_GAIN;
     var fighterRise = (fighterMass - HEAD_BUMP_RESTITUTION * input.propMass) * rise / totalMass;
@@ -365,7 +371,21 @@
     };
   }
 
+  // Walking or running into a prop drags it along as far as his legs can push:
+  // the push force is a multiple of his own weight, so a light crate follows
+  // his stride, a barrel creeps and a very heavy prop does not move at all
+  // (the prop's own floor friction, applied every step, eats whatever the push
+  // does not overcome). The prop never goes faster than he does.
+  var WALK_PUSH_FORCE_GRAVITIES = 1.6; // push force in fighter weights
+  function walkingPushSpeed(input) {
+    var accel = WALK_PUSH_FORCE_GRAVITIES * FIGHTER_MASS * input.gravity / input.propMass;
+    var current = Math.max(0, input.direction * input.propVx);
+    return input.direction * Math.min(Math.abs(input.fighterSpeed), current + accel);
+  }
+
   var api = {
+    WALK_PUSH_FORCE_GRAVITIES: WALK_PUSH_FORCE_GRAVITIES,
+    walkingPushSpeed: walkingPushSpeed,
     HEAD_BUMP_RESTITUTION: HEAD_BUMP_RESTITUTION,
     HEAD_BUMP_FORCE_GAIN: HEAD_BUMP_FORCE_GAIN,
     headBumpOutcome: headBumpOutcome,

@@ -85,6 +85,9 @@
     material: 'metal',
     knockbackMinSpeed: 2.5,        // only a blast-launched crate carries enough energy
     knockbackTransfer: 0.7,
+    fallCrushMinSpeed: 3,          // px/step: dropped on a fighter at this speed or more it crushes him
+    fallCrushDamagePerMomentum: 4, // damage per unit of mass x fall speed: 5.6 x 5 px/step is lethal
+    fallCrushBlastShare: 0.5,
     bounceChance: 0,
     crushChance: 0
   };
@@ -148,8 +151,8 @@
     friction: 0.6,
     kickSpeedRatio: KICK_SPEED_RATIO_TABLE, // original TABLE: KickPower 0.95 fixed impulse
     meleeVerticalRatio: 0.84,
-    torqueScale: 0.25,             // light and wide: it leans over, but never whirls in place
-    maxHitSpin: 0.05,
+    torqueScale: 0.2,              // rigid and wide: it resists the first push, a hard blow is needed to topple it
+    maxHitSpin: 0.04,
     hitPoints: 30,
     damageTakenMultiplier: 1,
     bulletHitSound: 'BULLET_HIT_WOOD',

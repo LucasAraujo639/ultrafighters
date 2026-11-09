@@ -18,7 +18,8 @@ function createGame() {
   const ctx = new Proxy({ createLinearGradient: () => gradient, createRadialGradient: () => gradient },
     { get: (t, k) => (k in t ? t[k] : noop), set() { return true; } });
   const canvas = { width: 800, height: 600, getContext: () => ctx };
-  const window = { addEventListener: noop, requestAnimationFrame: noop };
+  const listeners = Object.create(null);
+  const window = { addEventListener(type, cb) { listeners[type] = cb; }, requestAnimationFrame: noop };
   vm.runInNewContext(src, {
     window,
     SuperfightersRigidImpact: rigid,
@@ -31,6 +32,7 @@ function createGame() {
   }, { filename: 'src/game.js' });
   const game = window.__sf;
   game.botActive = false;
+  game.__listeners = listeners; // test-only: drive the keyboard
   return game;
 }
 
@@ -1223,4 +1225,85 @@ test('head bump rule: the prop is thrown 50 % then 40 % harder than the plain co
   const plainCollision = (1 + impact.HEAD_BUMP_RESTITUTION) * impact.FIGHTER_MASS * 5 / (impact.FIGHTER_MASS + 1);
   assert.ok(Math.abs(impact.HEAD_BUMP_FORCE_GAIN - 1.5 * 1.4) < 1e-12);
   assert.ok(Math.abs(-impact.headBumpOutcome(input).propVy - plainCollision * 1.5 * 1.4) < 1e-9);
+});
+
+// ---------- walking push, dense falling props, rigid table, hanging headbutt ----------
+
+test('walking push rule: light props follow his stride, never faster than he walks; heavy ones are overcome by friction', () => {
+  const base = { propVx: 0, direction: 1, fighterSpeed: 1.1, gravity: 0.3375 };
+  const crate = impact.walkingPushSpeed(Object.assign({}, base, { propMass: 1 }));
+  assert.ok(crate > 0 && crate <= 1.1, 'a crate picks up speed, capped by his walking speed');
+  let speed = 0;
+  for (let i = 0; i < 20; i++) speed = impact.walkingPushSpeed(Object.assign({}, base, { propMass: 1, propVx: speed }));
+  assert.equal(speed, 1.1, 'and reaches exactly his speed');
+  const heavyPush = impact.walkingPushSpeed(Object.assign({}, base, { propMass: 5.6 }));
+  assert.ok(heavyPush < crate / 4, 'a metal crate gains far less per step than a crate');
+  const left = impact.walkingPushSpeed({ propVx: 0, direction: -1, fighterSpeed: 1.1, propMass: 1, gravity: 0.3375 });
+  assert.ok(left < 0, 'pushing left drags it left');
+});
+
+function walkIntoProp(kind) {
+  const game = arenaGame();
+  const fighter = game.players[0];
+  const prop = settledCrate(game, 400, kind);
+  fighter.x = prop.x - fighter.w - 2; fighter.y = FLOOR_Y - fighter.h; fighter.lastDirX = 1;
+  fighter.onGround = true; fighter.groundedPlatform = game.platforms[0];
+  const startX = prop.x;
+  return { game, fighter, prop, startX };
+}
+
+test('in game: walking into a crate drags it along; a metal crate does not budge', () => {
+  for (const [kind, expectMoves] of [[null, true], ['table', true], ['metalCrate', false]]) {
+    const { game, fighter, prop, startX } = walkIntoProp(kind);
+    const listeners = game.__listeners;
+    assert.ok(listeners, 'the test game exposes its key listeners');
+    listeners.keydown({ code: 'KeyD', repeat: false, preventDefault() {} });
+    for (let i = 0; i < 80; i++) game.step();
+    listeners.keyup({ code: 'KeyD', preventDefault() {} });
+    const dragged = prop.x - startX;
+    if (expectMoves) assert.ok(dragged > 25, (kind || 'crate') + ' dragged ' + dragged.toFixed(1) + ' px');
+    else assert.ok(dragged < 8, 'metal crate dragged only ' + dragged.toFixed(1) + ' px');
+    assert.ok(fighter.x + fighter.w <= prop.x + 0.01, 'he never ends up inside it');
+  }
+});
+
+test('in game: a metal crate dropped on a fighter crushes him by its momentum; a wooden crate does not', () => {
+  const dropOn = (kind) => {
+    const game = arenaGame();
+    const fighter = game.players[0];
+    fighter.x = 400; fighter.y = FLOOR_Y - fighter.h; fighter.onGround = true; fighter.groundedPlatform = game.platforms[0];
+    game.step();
+    const prop = game.createCrate(fighter.x + fighter.w / 2 - 6, FLOOR_Y, kind);
+    prop.y = FLOOR_Y - fighter.h - 60 - prop.h; prop.vy = 2; prop.vx = 0; prop.resting = false;
+    for (let i = 0; i < 40; i++) game.step();
+    return fighter.hp;
+  };
+  assert.ok(dropOn('metalCrate') <= 40, 'crushed: hp ' + dropOn('metalCrate'));
+  assert.equal(dropOn(null), 100, 'a wooden crate only knocks the air out of nobody');
+});
+
+test('in game: the table resists a punch far more than a wooden crate (it needs a harder blow to topple)', () => {
+  const toppleRate = (kind) => {
+    let topples = 0;
+    const runs = 30;
+    for (let r = 0; r < runs; r++) {
+      const game = arenaGame();
+      const attacker = game.players[0];
+      const prop = settledCrate(game, 400, kind);
+      attacker.x = prop.x - attacker.w - 1; attacker.lastDirX = 1;
+      game.hitCratesInReach(attacker, 12, 0, game.meleePush.punchX, 0);
+      let tilt = 0;
+      for (let i = 0; i < 100; i++) { game.step(); attacker.x = 20; tilt = Math.max(tilt, Math.abs(prop.angle)); }
+      if (tilt > 0.7) topples++;
+    }
+    return topples / runs;
+  };
+  assert.ok(toppleRate('table') < toppleRate(null) * 0.5, 'table ' + toppleRate('table') + ' vs crate ' + toppleRate(null));
+});
+
+test('head bump rule: a hanging (anchored) body still takes the blow as a swing away from the side the head hit', () => {
+  const underLeft = impact.headBumpOutcome({ fighterRiseSpeed: 5, propMass: 12, propWidth: 36, propCenterX: 0, headCenterX: -10, anchored: true });
+  const underRight = impact.headBumpOutcome({ fighterRiseSpeed: 5, propMass: 12, propWidth: 36, propCenterX: 0, headCenterX: 10, anchored: true });
+  assert.ok(underLeft.swingImpulse > 0 && underRight.swingImpulse < 0);
+  assert.equal(underLeft.propVy, 0, 'it does not fly off its rope');
 });
