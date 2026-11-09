@@ -18,8 +18,9 @@
       justify-content: center;
     }
     #game {
-      width: 800px;
-      height: 600px;
+      display: block;
+      width: 100vw;
+      height: 100vh;
       background-color: #000;
       image-rendering: pixelated;
       image-rendering: crisp-edges;
@@ -29,6 +30,15 @@
 <body>
   <canvas id="game" width="800" height="600"></canvas>
   <script src="sprite-map.example.js"></script>
+  <script src="src/audio-manager.js"></script>
+  <script src="src/spawn-director.js"></script>
+  <script src="src/rigid-impact.js"></script>
+  <script src="src/impact-dynamics.js"></script>
+  <script src="src/heavy-props.js"></script>
+  <script src="src/fire-propagation.js"></script>
+  <script src="src/round-flow.js"></script>
+  <script src="src/fighter-hitbox.js"></script>
+  <script src="src/door-portal.js"></script>
   <script src="src/game.js"></script>
 </body>
 </html>
