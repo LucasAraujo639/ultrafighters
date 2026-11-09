@@ -26,6 +26,7 @@ function createGame() {
     SuperfightersHeavyProps: heavy,
     SuperfightersImpactDynamics: impact,
     SuperfightersFighterHitbox: hitbox,
+    SuperfightersPropFighterContacts: require('../src/prop-fighter-contacts.js'),
     document: { getElementById: () => canvas },
     performance: { now: () => 0 },
     console: { log: noop, warn: noop, error: noop }

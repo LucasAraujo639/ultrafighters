@@ -45,6 +45,7 @@ function createGame() {
     window, Image: FakeImage, Math: controlledMath,
     SuperfightersHeavyProps: heavy,
     SuperfightersFighterHitbox: require('../src/fighter-hitbox.js'),
+    SuperfightersPropFighterContacts: require('../src/prop-fighter-contacts.js'),
     SuperfightersFire: fire,
     SuperfightersRigidImpact: rigid,
     SuperfightersAudio: (() => {

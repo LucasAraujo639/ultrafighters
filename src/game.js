@@ -809,6 +809,7 @@
   // the props keep the rigid-impact behaviour above.
   var impactApi = (typeof SuperfightersImpactDynamics !== 'undefined') ? SuperfightersImpactDynamics : null;
   var fireApi = (typeof SuperfightersFire !== 'undefined') ? SuperfightersFire : null;
+  var propContactsApi = (typeof SuperfightersPropFighterContacts !== 'undefined') ? SuperfightersPropFighterContacts : null;
   var doorApi = (typeof SuperfightersDoorPortal !== 'undefined') ? SuperfightersDoorPortal : null;
   var hitboxApi = (typeof SuperfightersFighterHitbox !== 'undefined') ? SuperfightersFighterHitbox : null;
   var roundFlowApi = (typeof SuperfightersRoundFlow !== 'undefined') ? SuperfightersRoundFlow : null;
@@ -1804,94 +1805,10 @@
     launchFighterLikeBlast(p, away, blastShare);
   }
 
-  // Props touch the fighter's silhouette (head, torso, arms, legs, feet:
-  // fighter-hitbox.js), not his whole bounding box. Without the module the box
-  // stays the contact shape.
-  function fighterTouchesRect(p, rect) {
-    var bounds = p.getBounds();
-    return hitboxApi ? hitboxApi.silhouetteOverlaps(bounds, p.lastDirX || 1, rect) : rectsOverlap(bounds, rect);
-  }
-
-  // ---------- Walking under a prop that only reaches his head ----------
-  // impact-dynamics.js headContact: a graze is ignored, a deeper one is pressed
-  // through (the prop is lifted just enough to clear him). Returns true when the
-  // contact is a head contact (so no side block / shove applies).
-  var HEAD_PRESS_MAX_PROP_VY = 1; // px/step: faster than this the prop is dropping onto his head
-  function headPressesProp(p, prop, isBarrel) {
-    if (!impactApi || !impactApi.headContact || isAnchored(prop) || prop.burning) return false;
-    if (prop.y + prop.h / 2 >= p.y) return false;                  // its middle is not above his head: it is beside him
-    if ((prop.vy || 0) > HEAD_PRESS_MAX_PROP_VY) return false;     // a falling prop lands on him, it is not perched over him
-    var contact = impactApi.headContact(prop.y + prop.h - p.y);   // depth of his head inside the underside
-    if (contact === 'none') return false;
-    if (contact === 'press') {
-      var lift = impactApi.headPressLiftSpeed(prop.y + prop.h - p.y, isBarrel ? BARREL_GRAVITY : CRATE_GRAVITY);
-      if (prop.vy > lift) prop.vy = lift;
-      prop.resting = false;
-    }
-    return true;
-  }
-
-  // ---------- Jumping into a prop's underside: the head bump ----------
-  // The rising fighter's HEAD meets the prop. It is a real collision
-  // (impact-dynamics.js headBumpOutcome): the prop is thrown up (lighter, more),
-  // nudged a little away from the side the head hit and spun by the offset;
-  // the fighter keeps the rise the collision leaves him. Anchored props (the
-  // hanging deck) simply stop him.
-  function headBumpTarget(p, previousY) {
-    var head = hitboxApi ? hitboxApi.headRect(p.getBounds(), p.lastDirX || 1) : p.getBounds();
-    var lists = [crates, barrels];
-    for (var li = 0; li < lists.length; li++) {
-      var list = lists[li];
-      for (var i = 0; i < list.length; i++) {
-        var prop = list[i];
-        if (prop.dead || prop.fragment) continue;
-        if (!(head.x < prop.x + prop.w && head.x + head.w > prop.x)) continue;
-        var underside = prop.y + prop.h;
-        if (previousY >= underside - 1e-7 && p.y <= underside + 1e-7) return { prop: prop, head: head, isBarrel: li === 1 };
-      }
-    }
-    return null;
-  }
-
-  // Applies the collision to the prop and returns the fighter's remaining upward speed (px/step, >= 0 keeps rising, < 0 pushed down).
-  function applyHeadBump(p, target, riseSpeed) {
-    var prop = target.prop;
-    if (!impactApi || !impactApi.headBumpOutcome) return 0; // legacy: a solid ceiling
-    var outcome = impactApi.headBumpOutcome({
-      fighterRiseSpeed: riseSpeed,
-      propMass: target.isBarrel ? BARREL_MASS : (prop.mass || CRATE_MASS),
-      propWidth: prop.baseW || prop.w,
-      propCenterX: prop.x + prop.w / 2,
-      headCenterX: target.head.x + target.head.w / 2,
-      anchored: isAnchored(prop) || (target.isBarrel && prop.burning)
-    });
-    if (outcome.swingImpulse !== undefined && isAnchored(prop) && prop.anchor && heavyApi && heavyApi.pendulumImpulseSpin) {
-      swingHangingPropByRider(prop, outcome.swingImpulse); // the headbutt rocks the hanging deck
-    }
-    if (outcome.propVy === 0) return outcome.fighterRise;
-    prop.vx += outcome.propVx;
-    prop.vy += outcome.propVy;
-    prop.resting = false;
-    clampPropSpeed(prop);
-    if (rigidApi) {
-      var width = prop.baseW || prop.w;
-      var height = prop.baseH || prop.h;
-      var leverX = target.head.x + target.head.w / 2 - (prop.x + prop.w / 2);
-      var leverY = height / 2; // the push lands on the underside
-      var spinChange = rigidApi.spinChangeFromImpulse(width, height, leverX, leverY, outcome.propVx, outcome.propVy, 1);
-      if (target.isBarrel) {
-        prop.spin = hitSpin(prop.spin, spinChange * BARREL_TORQUE_SCALE, BARREL_MAX_HIT_SPIN, BARREL_W, BARREL_H, BARREL_GRAVITY * PROP_TIP_GRAVITY_SHARE);
-      } else {
-        addHitSpin(prop, spinChange);
-      }
-    }
-    return outcome.fighterRise;
-  }
-
   function crateHitsPlayer(c, p) {
     if (c.dead || p.hp <= 0) return;
-    if (!fighterTouchesRect(p, c)) return;
-    if (headPressesProp(p, c, false)) return; // his head under its underside: he walks on, the prop rides up
+    if (!propContacts.fighterTouchesRect(p, c)) return;
+    if (propContacts.headPressesProp(p, c, false)) return; // his head under its underside: he walks on, the prop rides up
     // a fighter this prop just crushed is flying clear: the prop must not grab,
     // knock down or re-crush him while the throw plays out
     if (c.lastCrushStep && c.lastCrushStep[p.id] !== undefined && propStepClock - c.lastCrushStep[p.id] <= PROP_CRUSH_IMMUNITY_STEPS) return;
@@ -3032,49 +2949,6 @@
     };
   }
 
-  // ---------- A blow on a prop with a fighter right behind it ----------
-  // The other fighter standing against the far face of the struck prop (in
-  // cover behind it, or just in front of it from the blow's side) takes the
-  // push through the prop: he rolls. The prop gives part of its motion back
-  // (impact-dynamics.js blockedBlowReboundSpeed) and can come back at the
-  // attacker, who rolls too only if the rebound carries the inertia to tip him.
-  var BLOCKED_BLOW_CONTACT_GAP_PX = 4;      // px between the prop's far face and the fighter that still counts as "right behind it"
-  var BLOCKED_BLOW_MIN_OVERLAP_Y = 4;       // px of shared height: a fighter below or above it is not covered by it
-  var BLOCKED_BLOW_MIN_SPEED = 0.2;         // px/step the blow must give the prop for anything to travel through it
-  function blockedBlowVictim(prop, attacker, dir) {
-    if (!impactApi || !impactApi.blockedBlowReboundSpeed || isAnchored(prop) || prop.dead || prop.burning) return null;
-    var fighters = [player1, player2];
-    for (var i = 0; i < fighters.length; i++) {
-      var p = fighters[i];
-      if (p === attacker || p.hp <= 0) continue;
-      if (p.knockbackRoll || p.rolling || p.knockedDown || p.matrixDodgeTimer > 0 || p.grabbedBy) continue;
-      if (p.groundedCrate === prop || p.groundedBarrel === prop) continue; // standing on it, not behind it
-      var gap = dir > 0 ? p.x - (prop.x + prop.w) : prop.x - (p.x + p.w);
-      if (gap > BLOCKED_BLOW_CONTACT_GAP_PX || gap < -prop.w * PROP_DEEP_OVERLAP_SHARE) continue;
-      var sharedHeight = Math.min(p.y + p.h, prop.y + prop.h) - Math.max(p.y, prop.y);
-      if (sharedHeight < BLOCKED_BLOW_MIN_OVERLAP_Y) continue;
-      return p;
-    }
-    return null;
-  }
-
-  // Called right after the blow's impulse was applied to `prop`.
-  function reactToBlockedBlow(prop, victim, dir) {
-    if (!victim) return;
-    var speed = (prop.vx || 0) * dir; // speed the blow gave it, toward the victim
-    if (speed < BLOCKED_BLOW_MIN_SPEED) return;
-    if (victim.aiming) victim.abortAiming(true, 'vanish');
-    victim.onGround = false;
-    victim.groundedCrate = null;
-    victim.groundedBarrel = null;
-    victim.groundedPlatform = null;
-    victim.airVelocityX = dir * Math.min(TOPPLE_ROLL_MAX_SPEED, Math.max(speed * TOPPLE_KNOCKBACK_TRANSFER, TOPPLE_ROLL_MIN_SPEED));
-    victim.airVelocityY = -KNOCKBACK_ROLL_POP * TOPPLE_ROLL_POP_SHARE;
-    victim.startKnockbackRoll(dir);
-    prop.vx = -dir * impactApi.blockedBlowReboundSpeed(speed); // it comes back toward whoever swung
-    prop.resting = false;
-  }
-
   function hitCratesInReach(attacker, reach, damage, pushX, pushY, hitKind) {
     var dir = attacker.lastDirX;
     var hitBox = {
@@ -3089,9 +2963,9 @@
       if (!rectsOverlap(hitBox, c)) continue;
       var blow = meleeContact(attacker, hitKind || 'punch');
       blow.genericPop = !pushY; // the default upward pop lifts the prop; it is not an off-centre push
-      var coveredFighter = blockedBlowVictim(c, attacker, dir);
+      var coveredFighter = propContacts.blockedBlowVictim(c, attacker, dir);
       damageCrate(c, damage, dir * (pushX || 3), pushY || DEFAULT_MELEE_PUSH_Y, blow);
-      reactToBlockedBlow(c, coveredFighter, dir);
+      propContacts.reactToBlockedBlow(c, coveredFighter, dir);
       if (!heaviestHit || (c.mass || 1) > (heaviestHit.mass || 1)) heaviestHit = c;
     }
     if (heaviestHit) applyMeleeRecoil(attacker, heaviestHit, pushX || 3);
@@ -3232,6 +3106,31 @@
   // bullet/blast/flame contact stages 1 (launch + BurningState, art 127 -> 161)
   // and the next solid contact while burning detonates the stage 2 barrel.
   var barrels = [];
+  // Fighter <-> prop contact rules (head press, headbutt, blocked blow, silhouette
+  // contact) live in prop-fighter-contacts.js; this wires them to the world.
+  // Without the module props only touch the fighter's box and never react to his head.
+  var propContacts = propContactsApi ? propContactsApi.createPropFighterContacts({
+    impactApi: impactApi, rigidApi: rigidApi, heavyApi: heavyApi, hitboxApi: hitboxApi,
+    crates: crates, barrels: barrels,
+    fighters: function () { return [player1, player2]; },
+    rectsOverlap: rectsOverlap, isAnchored: isAnchored, clampPropSpeed: clampPropSpeed,
+    hitSpin: hitSpin, addHitSpin: addHitSpin, swingHangingPropByRider: swingHangingPropByRider,
+    constants: {
+      BARREL_MASS: BARREL_MASS, CRATE_MASS: CRATE_MASS, BARREL_GRAVITY: BARREL_GRAVITY, CRATE_GRAVITY: CRATE_GRAVITY,
+      BARREL_W: BARREL_W, BARREL_H: BARREL_H, BARREL_TORQUE_SCALE: BARREL_TORQUE_SCALE, BARREL_MAX_HIT_SPIN: BARREL_MAX_HIT_SPIN,
+      PROP_TIP_GRAVITY_SHARE: PROP_TIP_GRAVITY_SHARE, PROP_DEEP_OVERLAP_SHARE: PROP_DEEP_OVERLAP_SHARE,
+      TOPPLE_ROLL_MAX_SPEED: TOPPLE_ROLL_MAX_SPEED, TOPPLE_ROLL_MIN_SPEED: TOPPLE_ROLL_MIN_SPEED,
+      TOPPLE_KNOCKBACK_TRANSFER: TOPPLE_KNOCKBACK_TRANSFER, TOPPLE_ROLL_POP_SHARE: TOPPLE_ROLL_POP_SHARE,
+      KNOCKBACK_ROLL_POP: KNOCKBACK_ROLL_POP
+    }
+  }) : {
+    fighterTouchesRect: function (p, rect) { return rectsOverlap(p.getBounds(), rect); },
+    headPressesProp: function () { return false; },
+    headBumpTarget: function () { return null; },
+    applyHeadBump: function () { return 0; },
+    blockedBlowVictim: function () { return null; },
+    reactToBlockedBlow: function () {}
+  };
   CoverSystem.registerSource(barrels);
   function createBarrel(x, yBottom) {
     var b = {
@@ -3396,9 +3295,9 @@
       if (b.dead) continue;
       if (!rectsOverlap(hitBox, b)) continue;
       if (b.burning) { detonateBarrel(b); continue; }
-      var coveredByBarrel = blockedBlowVictim(b, attacker, dir);
+      var coveredByBarrel = propContacts.blockedBlowVictim(b, attacker, dir);
       applyBarrelHit(b, dir, pushX, pushY, attacker, hitKind || 'punch');
-      reactToBlockedBlow(b, coveredByBarrel, dir);
+      propContacts.reactToBlockedBlow(b, coveredByBarrel, dir);
       applyMeleeRecoil(attacker, b, pushX || 3);
     }
   }
@@ -3730,8 +3629,8 @@
             }
             continue;
           }
-          if (!fighterTouchesRect(p, b)) continue;
-          if (headPressesProp(p, b, true)) continue;
+          if (!propContacts.fighterTouchesRect(p, b)) continue;
+          if (propContacts.headPressesProp(p, b, true)) continue;
           if (b.burning && !isUltraInstinct(p)) {
             p.damage(BARREL_TOUCH_BURN_DAMAGE);
             p.fireFlash = Math.max(p.fireFlash, 4);
@@ -9909,10 +9808,10 @@ this.updateBurst();
       bounds = this.getBounds();
       if (c < 0 && !this.climbing) {
         // rising into a prop's underside: the head bump (the prop gets thrown up)
-        var bumped = headBumpTarget(this, subY0);
+        var bumped = propContacts.headBumpTarget(this, subY0);
         if (bumped) {
           var riseSpeed = this.airVelocityY < 0 ? -this.airVelocityY : -c;
-          var remainingRise = applyHeadBump(this, bumped, riseSpeed);
+          var remainingRise = propContacts.applyHeadBump(this, bumped, riseSpeed);
           this.y = bumped.prop.y + bumped.prop.h;
           this.airVelocityY = -remainingRise; // keeps rising (negative) or is pushed back down (positive)
           c = 0;
@@ -10055,7 +9954,7 @@ this.updateBurst();
         if (!(this.y + this.h > crate2.y + 2)) continue; // beside it, not on top
         var pxb = this.getBounds();
         if (!rectsOverlap(pxb, crate2)) continue;
-        if (headPressesProp(this, crate2, false)) continue; // only his head is under it: no wall
+        if (propContacts.headPressesProp(this, crate2, false)) continue; // only his head is under it: no wall
         var wasBeside = prevX < crate2.x + crate2.w && prevX + this.w > crate2.x;
         if (wasBeside) continue; // spawned overlapping; vertical handles it
         if (h > 0) this.x = crate2.x - this.w;

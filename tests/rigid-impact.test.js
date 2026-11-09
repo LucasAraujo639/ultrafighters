@@ -81,7 +81,7 @@ function createGame(randomValue) {
     dive: 624, knockedDown: [609, 610], SoftLanding: 611
   };
   const sandbox = {
-    window, Image: FakeImage, Math: controlledMath, SuperfightersRigidImpact: rigid, SuperfightersHeavyProps: heavy, SuperfightersFighterHitbox: require('../src/fighter-hitbox.js'), SuperfightersFire: fire,
+    window, Image: FakeImage, Math: controlledMath, SuperfightersRigidImpact: rigid, SuperfightersHeavyProps: heavy, SuperfightersFighterHitbox: require('../src/fighter-hitbox.js'), SuperfightersPropFighterContacts: require('../src/prop-fighter-contacts.js'), SuperfightersFire: fire,
     document: { getElementById: () => canvas, createElement: (t) => (t === 'canvas' ? canvas : {}) },
     performance: { now: () => 0 }, console: { log: noop, warn: noop, error: noop }
   };
